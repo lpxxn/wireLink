@@ -7,6 +7,8 @@
         Height="850"
         MinWidth="1040"
         MinHeight="680"
+        ShowInTaskbar="True"
+        WindowStartupLocation="CenterScreen"
         Title="WireLink · RS485 设备通信工具">
 
   <Window.Styles>

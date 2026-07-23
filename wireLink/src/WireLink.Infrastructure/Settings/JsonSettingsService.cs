@@ -25,8 +25,9 @@ public sealed class JsonSettingsService : ISettingsService
         if (!File.Exists(_path)) return new AppSettings();
         try
         {
-            await using var stream = File.OpenRead(_path);
-            return await JsonSerializer.DeserializeAsync<AppSettings>(stream, _options, cancellationToken) ?? new AppSettings();
+            using var stream = File.OpenRead(_path);
+            return await JsonSerializer.DeserializeAsync<AppSettings>(stream, _options, cancellationToken)
+                .ConfigureAwait(false) ?? new AppSettings();
         }
         catch (JsonException) { return new AppSettings(); }
         catch (IOException) { return new AppSettings(); }
@@ -35,7 +36,8 @@ public sealed class JsonSettingsService : ISettingsService
     public async Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        await using var stream = File.Create(_path);
-        await JsonSerializer.SerializeAsync(stream, settings, _options, cancellationToken);
+        using var stream = File.Create(_path);
+        await JsonSerializer.SerializeAsync(stream, settings, _options, cancellationToken)
+            .ConfigureAwait(false);
     }
 }
