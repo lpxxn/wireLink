@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WireLink.App\WireLink.App.csproj" />
+    <ProjectReference Include="..\..\src\WireLink.Core\WireLink.Core.csproj" />
+    <ProjectReference Include="..\..\src\WireLink.Infrastructure\WireLink.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\WireLink.Simulator\WireLink.Simulator.csproj" />
+  </ItemGroup>
+
+</Project>

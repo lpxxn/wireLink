@@ -1,0 +1,376 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WireLink.App.ViewModels"
+        x:Class="WireLink.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Width="1360"
+        Height="850"
+        MinWidth="1040"
+        MinHeight="680"
+        Title="WireLink · RS485 设备通信工具">
+
+  <Window.Styles>
+    <Style Selector="Border.panel">
+      <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}"/>
+      <Setter Property="BorderBrush" Value="#E4E8F0"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="16"/>
+      <Setter Property="BoxShadow" Value="0 6 24 0 #120F172A"/>
+    </Style>
+    <Style Selector="Border.icon-tile">
+      <Setter Property="Width" Value="36"/>
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Background" Value="#EAF0FF"/>
+    </Style>
+    <Style Selector="TextBlock.section-title">
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="Medium"/>
+      <Setter Property="Opacity" Value=".82"/>
+    </Style>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Opacity" Value=".56"/>
+    </Style>
+    <Style Selector="TextBlock.table-heading">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#526079"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ComboBox.input">
+      <Setter Property="MinHeight" Value="40"/>
+      <Setter Property="CornerRadius" Value="8"/>
+    </Style>
+    <Style Selector="ComboBox.serial-input">
+      <Setter Property="Width" Value="250"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+    </Style>
+    <Style Selector="NumericUpDown.input">
+      <Setter Property="MinHeight" Value="40"/>
+      <Setter Property="CornerRadius" Value="8"/>
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="MinHeight" Value="38"/>
+      <Setter Property="Padding" Value="16,8"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="#3D67E8"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.primary:pointerover">
+      <Setter Property="Background" Value="#5278EE"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.primary:pressed">
+      <Setter Property="Background" Value="#2F55CF"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.primary:disabled">
+      <Setter Property="Background" Value="#E4E9F5"/>
+      <Setter Property="Foreground" Value="#9AA6BD"/>
+    </Style>
+    <Style Selector="Button.secondary">
+      <Setter Property="Background" Value="#EDF2FF"/>
+      <Setter Property="Foreground" Value="#3159D5"/>
+    </Style>
+    <Style Selector="Button.secondary:pointerover">
+      <Setter Property="Background" Value="#DFE7FF"/>
+      <Setter Property="Foreground" Value="#274FCB"/>
+    </Style>
+    <Style Selector="Button.secondary:pressed">
+      <Setter Property="Background" Value="#CFDAFC"/>
+      <Setter Property="Foreground" Value="#2147BB"/>
+    </Style>
+    <Style Selector="Button.secondary:disabled">
+      <Setter Property="Background" Value="#F0F3F9"/>
+      <Setter Property="Foreground" Value="#A4AEC0"/>
+    </Style>
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Padding" Value="20,14"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+    <Grid ColumnDefinitions="292,*" ColumnSpacing="18" Margin="18">
+      <!-- 左侧控制台：按原型将串口与设备设置收拢为一张控制卡。 -->
+      <Border Classes="panel" Padding="20">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="18">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
+              <Border Classes="icon-tile">
+                <TextBlock Text="↔" Foreground="#3D67E8" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Border>
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                <TextBlock Classes="section-title" Text="串口连接"/>
+                <TextBlock Classes="caption" Text="配置设备通信端口"/>
+              </StackPanel>
+            </Grid>
+
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="label" Text="端口" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Classes="caption" Text="展开时自动扫描" VerticalAlignment="Center"/>
+              </Grid>
+              <ComboBox x:Name="PortComboBox"
+                        Classes="input serial-input"
+                        IsEditable="True"
+                        ItemsSource="{Binding PortNames}"
+                        Text="{Binding PortName}"
+                        IsEnabled="{Binding CanConfigureSerial}"
+                        DropDownOpened="OnPortDropDownOpened"/>
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+              <TextBlock Classes="label" Text="波特率"/>
+              <ComboBox Classes="input serial-input"
+                        ItemsSource="{Binding BaudRates}"
+                        SelectedItem="{Binding BaudRate}"
+                        IsEnabled="{Binding CanConfigureSerial}"/>
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Width="9" Height="9" CornerRadius="5" Background="{Binding SerialStatusBrush}"/>
+                <TextBlock Text="{Binding SerialStatusText}" FontSize="13" FontWeight="Medium"/>
+              </StackPanel>
+              <TextBlock Grid.Column="1" Classes="caption" Text="通信链路" VerticalAlignment="Center"/>
+            </Grid>
+
+            <Button Classes="primary"
+                    Command="{Binding ToggleSerialCommand}"
+                    Content="{Binding SerialButtonText}"
+                    HorizontalAlignment="Stretch"/>
+
+            <Border Height="1" Background="#E7EAF0" Margin="0,2"/>
+
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
+              <Border Classes="icon-tile">
+                <TextBlock Text="▣" Foreground="#3D67E8" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Border>
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                <TextBlock Classes="section-title" Text="设备信息"/>
+                <TextBlock Classes="caption" Text="设置 Modbus 从机地址"/>
+              </StackPanel>
+            </Grid>
+
+            <StackPanel Spacing="8">
+              <TextBlock Classes="label" Text="设备地址"/>
+              <NumericUpDown Classes="input"
+                             Value="{Binding DeviceAddress}"
+                             Minimum="1"
+                             Maximum="255"
+                             Increment="1"
+                             IsEnabled="{Binding IsSerialOpen}"/>
+              <TextBlock Classes="caption" Text="{Binding AddressHint}"/>
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Width="9" Height="9" CornerRadius="5" Background="{Binding DeviceStatusBrush}"/>
+                <TextBlock Text="{Binding DeviceStatusText}" FontSize="13" FontWeight="Medium"/>
+              </StackPanel>
+              <TextBlock Grid.Column="1" Classes="caption" Text="设备状态" VerticalAlignment="Center"/>
+            </Grid>
+
+            <Button Classes="secondary"
+                    Command="{Binding TestConnectionCommand}"
+                    IsEnabled="{Binding CanTest}"
+                    Content="连接测试"
+                    HorizontalAlignment="Stretch"/>
+
+            <Border Height="1" Background="#E7EAF0" Margin="0,2"/>
+
+            <Expander Header="高级通信设置">
+              <StackPanel Spacing="9" Margin="0,12,0,2">
+                <TextBlock Classes="label" Text="uint32 字序"/>
+                <ComboBox Classes="input" ItemsSource="{Binding WordOrders}" SelectedItem="{Binding WordOrder}"/>
+                <TextBlock Classes="label" Text="请求超时（ms）" Margin="0,4,0,0"/>
+                <NumericUpDown Classes="input" Value="{Binding ReadTimeoutMilliseconds}" Minimum="100" Maximum="10000" Increment="100"/>
+                <TextBlock Classes="label" Text="故障记录就绪等待（ms）" Margin="0,4,0,0"/>
+                <NumericUpDown Classes="input" Value="{Binding FaultDelayMilliseconds}" Minimum="0" Maximum="2000" Increment="50"/>
+              </StackPanel>
+            </Expander>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <!-- 数据工作区：标签、操作工具栏和表格形成单一连续面板。 -->
+      <Border Grid.Column="1" Classes="panel" Padding="0" ClipToBounds="True">
+        <TabControl>
+          <TabItem Header="设备数据">
+            <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20">
+              <Grid ColumnDefinitions="92,Auto,Auto,*,Auto,Auto" ColumnSpacing="10">
+                <NumericUpDown Classes="input"
+                               Value="{Binding RefreshSeconds}"
+                               Minimum="1"
+                               Maximum="3600"
+                               Increment="1"
+                               MinHeight="36"/>
+                <TextBlock Grid.Column="1" Text="秒" VerticalAlignment="Center" Opacity=".72"/>
+                <CheckBox Grid.Column="2"
+                          IsChecked="{Binding AutoRefresh}"
+                          IsEnabled="{Binding CanRead}"
+                          Content="自动刷新"
+                          VerticalAlignment="Center"
+                          Margin="4,0,0,0"/>
+                <Button Grid.Column="4"
+                        Classes="secondary"
+                        Command="{Binding ReadDeviceCommand}"
+                        IsEnabled="{Binding CanRead}"
+                        Content="立即读取"/>
+                <Button Grid.Column="5"
+                        Classes="primary"
+                        Command="{Binding ExportDeviceCommand}"
+                        IsEnabled="{Binding CanExportDevice}"
+                        Content="导出 Excel"/>
+              </Grid>
+
+              <Border Grid.Row="1"
+                      Background="#EEF3FF"
+                      BorderBrush="#E1E7F2"
+                      BorderThickness="1"
+                      CornerRadius="10,10,0,0"
+                      Margin="0,14,0,0"
+                      MinHeight="42">
+                <Grid ColumnDefinitions="2*,1.15*,2*,1.15*">
+                  <TextBlock Classes="table-heading" Text="名称" Margin="14,0"/>
+                  <TextBlock Grid.Column="1" Classes="table-heading" Text="数值" Margin="14,0"/>
+                  <TextBlock Grid.Column="2" Classes="table-heading" Text="名称" Margin="14,0"/>
+                  <TextBlock Grid.Column="3" Classes="table-heading" Text="数值" Margin="14,0"/>
+                </Grid>
+              </Border>
+
+              <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                  <ItemsControl ItemsSource="{Binding DeviceRows}" MinWidth="760">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DataRowViewModel">
+                        <Grid ColumnDefinitions="2*,1.15*,2*,1.15*" MinHeight="44">
+                          <Border BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                            <TextBlock Text="{Binding Left.Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                              <ToolTip.Tip><TextBlock Text="{Binding Left.Tooltip}"/></ToolTip.Tip>
+                            </TextBlock>
+                          </Border>
+                          <Border Grid.Column="1" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <TextBlock Text="{Binding Left.DisplayValue}" VerticalAlignment="Center" FontWeight="Medium"/>
+                              <TextBlock Text="⚠" IsVisible="{Binding Left.HasWarning}" Foreground="#E4A11B" ToolTip.Tip="{Binding Left.Warning}"/>
+                            </StackPanel>
+                          </Border>
+                          <Border Grid.Column="2" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                            <TextBlock Text="{Binding Right.Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                              <ToolTip.Tip><TextBlock Text="{Binding Right.Tooltip}"/></ToolTip.Tip>
+                            </TextBlock>
+                          </Border>
+                          <Border Grid.Column="3" BorderBrush="#E6EAF2" BorderThickness="1,0,1,1" Padding="14,9">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <TextBlock Text="{Binding Right.DisplayValue}" VerticalAlignment="Center" FontWeight="Medium"/>
+                              <TextBlock Text="⚠" IsVisible="{Binding Right.HasWarning}" Foreground="#E4A11B" ToolTip.Tip="{Binding Right.Warning}"/>
+                            </StackPanel>
+                          </Border>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+              </ScrollViewer>
+            </Grid>
+          </TabItem>
+
+          <TabItem Header="录波数据">
+            <Grid Margin="20,14,20,20">
+              <Border BorderBrush="#E3E7EF" BorderThickness="1" CornerRadius="12" Background="#FAFBFD">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                  <Border Classes="icon-tile" Width="52" Height="52" CornerRadius="16">
+                    <TextBlock Text="〰" FontSize="28" Foreground="#3D67E8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                  <TextBlock Text="录波数据暂不可用" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                  <TextBlock Text="寄存器地址、采样率、点数和分包规则确认后，将在这里展示三相曲线。"
+                             Opacity=".56" MaxWidth="520" TextAlignment="Center" TextWrapping="Wrap"/>
+                  <Button Classes="secondary" IsEnabled="False" Content="读取录波数据" HorizontalAlignment="Center"/>
+                </StackPanel>
+              </Border>
+            </Grid>
+          </TabItem>
+
+          <TabItem Header="故障数据">
+            <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20">
+              <Grid ColumnDefinitions="138,104,*,Auto,Auto" ColumnSpacing="10">
+                <ComboBox Classes="input"
+                          ItemsSource="{Binding FaultRecordTypes}"
+                          SelectedItem="{Binding FaultRecordType}"
+                          IsEnabled="{Binding CanRead}"/>
+                <NumericUpDown Grid.Column="1"
+                               Classes="input"
+                               Value="{Binding FaultRecordIndex}"
+                               Minimum="0"
+                               Maximum="15"
+                               Increment="1"
+                               IsEnabled="{Binding CanRead}"/>
+                <TextBlock Grid.Column="2"
+                           Text="记录编号 0～15"
+                           VerticalAlignment="Center"
+                           Opacity=".56"/>
+                <Button Grid.Column="3"
+                        Classes="secondary"
+                        Command="{Binding ReadFaultCommand}"
+                        IsEnabled="{Binding CanRead}"
+                        Content="立即读取"/>
+                <Button Grid.Column="4"
+                        Classes="primary"
+                        Command="{Binding ExportFaultCommand}"
+                        IsEnabled="{Binding CanExportFault}"
+                        Content="导出 Excel"/>
+              </Grid>
+
+              <Border Grid.Row="1"
+                      Background="#EEF3FF"
+                      BorderBrush="#E1E7F2"
+                      BorderThickness="1"
+                      CornerRadius="10,10,0,0"
+                      Margin="0,14,0,0"
+                      MinHeight="42">
+                <Grid ColumnDefinitions="2*,1.15*,2*,1.15*">
+                  <TextBlock Classes="table-heading" Text="名称" Margin="14,0"/>
+                  <TextBlock Grid.Column="1" Classes="table-heading" Text="数值" Margin="14,0"/>
+                  <TextBlock Grid.Column="2" Classes="table-heading" Text="名称" Margin="14,0"/>
+                  <TextBlock Grid.Column="3" Classes="table-heading" Text="数值" Margin="14,0"/>
+                </Grid>
+              </Border>
+
+              <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding FaultRows}" MinWidth="760">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DataRowViewModel">
+                      <Grid ColumnDefinitions="2*,1.15*,2*,1.15*" MinHeight="44">
+                        <Border BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                          <TextBlock Text="{Binding Left.Name}" ToolTip.Tip="{Binding Left.Tooltip}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </Border>
+                        <Border Grid.Column="1" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                          <TextBlock Text="{Binding Left.DisplayValue}" ToolTip.Tip="{Binding Left.Warning}" VerticalAlignment="Center" FontWeight="Medium"/>
+                        </Border>
+                        <Border Grid.Column="2" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                          <TextBlock Text="{Binding Right.Name}" ToolTip.Tip="{Binding Right.Tooltip}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </Border>
+                        <Border Grid.Column="3" BorderBrush="#E6EAF2" BorderThickness="1,0,1,1" Padding="14,9">
+                          <TextBlock Text="{Binding Right.DisplayValue}" ToolTip.Tip="{Binding Right.Warning}" VerticalAlignment="Center" FontWeight="Medium"/>
+                        </Border>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Grid>
+          </TabItem>
+        </TabControl>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

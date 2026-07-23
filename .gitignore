@@ -1,0 +1,11 @@
+.DS_Store
+**/bin/
+**/obj/
+**/publish/
+**/TestResults/
+*.user
+*.log
+tran.md
+input.docx
+read_data.md
+.vscode/

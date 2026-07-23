@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WireLink.App.ViewModels" x:Class="WireLink.App.Views.LogWindow"
+        x:DataType="vm:LogViewModel" Width="1000" Height="620" MinWidth="720" MinHeight="420"
+        Title="WireLink 诊断日志">
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <Grid ColumnDefinitions="160,220,Auto,Auto,Auto,Auto,*,Auto" ColumnSpacing="10">
+      <ComboBox ItemsSource="{Binding Levels}" SelectedItem="{Binding Minimum}" />
+      <TextBox Grid.Column="1" Text="{Binding Keyword}" PlaceholderText="按关键字过滤" />
+      <CheckBox Grid.Column="2" IsChecked="{Binding Paused}" Content="暂停滚动" VerticalAlignment="Center" />
+      <Button Grid.Column="3" Command="{Binding RefreshCommand}" Content="刷新显示" />
+      <Button Grid.Column="4" Click="OnCopyClick" Content="复制所选" />
+      <Button Grid.Column="5" Click="OnOpenDirectoryClick" Content="打开目录" />
+      <TextBlock Grid.Column="6" Text="{Binding LogDirectory}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Opacity=".6" />
+      <Button Grid.Column="7" Command="{Binding ClearCommand}" Content="清空显示" />
+    </Grid>
+    <ListBox Grid.Row="1" Margin="0,12,0,0" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}" FontFamily="Menlo,Consolas,monospace">
+      <ListBox.ItemTemplate>
+        <DataTemplate>
+          <Grid ColumnDefinitions="180,90,*" ColumnSpacing="8" Margin="4">
+            <TextBlock Text="{Binding Timestamp, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss.fff}'}" />
+            <TextBlock Grid.Column="1" Text="{Binding Level}" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </Grid>
+</Window>

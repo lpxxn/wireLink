@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WireLink.App/WireLink.App.csproj" />
+    <Project Path="src/WireLink.Core/WireLink.Core.csproj" />
+    <Project Path="src/WireLink.Infrastructure/WireLink.Infrastructure.csproj" />
+    <Project Path="src/WireLink.Simulator/WireLink.Simulator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WireLink.Tests/WireLink.Tests.csproj" />
+  </Folder>
+</Solution>
