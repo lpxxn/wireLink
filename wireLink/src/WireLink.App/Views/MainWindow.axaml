@@ -67,14 +67,26 @@
       <Setter Property="Foreground" Value="White"/>
     </Style>
     <Style Selector="Button.primary:pointerover">
-      <Setter Property="Background" Value="#5278EE"/>
+      <Setter Property="Background" Value="#315BD8"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#315BD8"/>
       <Setter Property="Foreground" Value="White"/>
     </Style>
     <Style Selector="Button.primary:pressed">
-      <Setter Property="Background" Value="#2F55CF"/>
+      <Setter Property="Background" Value="#2548B8"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="#2548B8"/>
       <Setter Property="Foreground" Value="White"/>
     </Style>
     <Style Selector="Button.primary:disabled">
+      <Setter Property="Background" Value="#E4E9F5"/>
+      <Setter Property="Foreground" Value="#9AA6BD"/>
+    </Style>
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter">
       <Setter Property="Background" Value="#E4E9F5"/>
       <Setter Property="Foreground" Value="#9AA6BD"/>
     </Style>
@@ -83,14 +95,26 @@
       <Setter Property="Foreground" Value="#3159D5"/>
     </Style>
     <Style Selector="Button.secondary:pointerover">
-      <Setter Property="Background" Value="#DFE7FF"/>
+      <Setter Property="Background" Value="#D6E1FF"/>
+      <Setter Property="Foreground" Value="#274FCB"/>
+    </Style>
+    <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#D6E1FF"/>
       <Setter Property="Foreground" Value="#274FCB"/>
     </Style>
     <Style Selector="Button.secondary:pressed">
       <Setter Property="Background" Value="#CFDAFC"/>
       <Setter Property="Foreground" Value="#2147BB"/>
     </Style>
+    <Style Selector="Button.secondary:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="#CFDAFC"/>
+      <Setter Property="Foreground" Value="#2147BB"/>
+    </Style>
     <Style Selector="Button.secondary:disabled">
+      <Setter Property="Background" Value="#F0F3F9"/>
+      <Setter Property="Foreground" Value="#A4AEC0"/>
+    </Style>
+    <Style Selector="Button.secondary:disabled /template/ ContentPresenter">
       <Setter Property="Background" Value="#F0F3F9"/>
       <Setter Property="Foreground" Value="#A4AEC0"/>
     </Style>
