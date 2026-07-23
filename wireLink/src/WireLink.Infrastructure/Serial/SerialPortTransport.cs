@@ -22,8 +22,11 @@ public sealed class SerialPortTransport : IByteTransport
                 Handshake = Handshake.None,
                 DtrEnable = false,
                 RtsEnable = false,
-                ReadTimeout = Timeout.Infinite,
-                WriteTimeout = Timeout.Infinite,
+                // SerialPort.BaseStream.ReadAsync does not reliably observe cancellation on
+                // Windows. Keep the driver operations bounded so a silent device cannot leave
+                // the UI permanently waiting for a request to finish.
+                ReadTimeout = ToSerialTimeout(options.ReadTimeout),
+                WriteTimeout = ToSerialTimeout(options.WriteTimeout),
             };
             port.Open();
             _port = port;
@@ -54,13 +57,29 @@ public sealed class SerialPortTransport : IByteTransport
 
     public async ValueTask WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
     {
-        var stream = GetOpenPort().BaseStream;
-        await stream.WriteAsync(data, cancellationToken);
-        await stream.FlushAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var port = GetOpenPort();
+        var bytes = data.ToArray();
+        await Task.Run(() => port.Write(bytes, 0, bytes.Length), cancellationToken);
     }
 
-    public ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-        GetOpenPort().BaseStream.ReadAsync(buffer, cancellationToken);
+    public async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var port = GetOpenPort();
+        var bytes = new byte[buffer.Length];
+        var count = await Task.Run(() => port.Read(bytes, 0, bytes.Length), cancellationToken);
+        bytes.AsMemory(0, count).CopyTo(buffer);
+        return count;
+    }
+
+    private static int ToSerialTimeout(TimeSpan timeout)
+    {
+        if (timeout <= TimeSpan.Zero || timeout.TotalMilliseconds > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(timeout), "串口超时必须大于 0 且不超过 Int32 毫秒上限。");
+
+        return Math.Max(1, (int)Math.Ceiling(timeout.TotalMilliseconds));
+    }
 
     private SerialPort GetOpenPort() => _port is { IsOpen: true } port
         ? port

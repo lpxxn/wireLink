@@ -328,28 +328,13 @@
 
           <TabItem Header="故障数据">
             <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20">
-              <Grid ColumnDefinitions="138,104,*,Auto,Auto" ColumnSpacing="10">
-                <ComboBox Classes="input"
-                          ItemsSource="{Binding FaultRecordTypes}"
-                          SelectedItem="{Binding FaultRecordType}"
-                          IsEnabled="{Binding CanRead}"/>
-                <NumericUpDown Grid.Column="1"
-                               Classes="input"
-                               Value="{Binding FaultRecordIndex}"
-                               Minimum="0"
-                               Maximum="15"
-                               Increment="1"
-                               IsEnabled="{Binding CanRead}"/>
-                <TextBlock Grid.Column="2"
-                           Text="记录编号 0～15"
-                           VerticalAlignment="Center"
-                           Opacity=".56"/>
-                <Button Grid.Column="3"
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                <Button Grid.Column="1"
                         Classes="secondary"
                         Command="{Binding ReadFaultCommand}"
                         IsEnabled="{Binding CanRead}"
                         Content="立即读取"/>
-                <Button Grid.Column="4"
+                <Button Grid.Column="2"
                         Classes="primary"
                         Command="{Binding ExportFaultCommand}"
                         IsEnabled="{Binding CanExportFault}"
