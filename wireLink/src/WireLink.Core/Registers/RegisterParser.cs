@@ -215,7 +215,7 @@ public sealed class RegisterParser
     /// <summary>
     /// 报警事件按已确认的 5.5.2 规则只有数据 0 有效：
     /// 当前报警的 517～523、历史报警的 773～779 均返回空显示值。
-    /// 故障和变位事件仍保留原值，等待各字段规则继续补齐。
+    /// 故障和变位事件按当前约定直接显示十进制原始值。
     /// </summary>
     private static (string, string, ParseStatus, string?) DecodeAdditionalEventData(
         uint raw,
@@ -223,9 +223,17 @@ public sealed class RegisterParser
         FaultRecordType? recordType)
     {
         var effectiveType = ResolveEventType(samples, recordType);
-        return effectiveType == FaultRecordType.Alarm
-            ? (string.Empty, "报警仅数据 0 有效，本字段为空", ParseStatus.Success, null)
-            : ($"0x{raw:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "事件特定解析尚未完成或协议待确认");
+        return effectiveType switch
+        {
+            FaultRecordType.Alarm =>
+                (string.Empty, "报警仅数据 0 有效，本字段为空", ParseStatus.Success, null),
+            FaultRecordType.Fault or FaultRecordType.StateChange =>
+                (raw.ToString(CultureInfo.InvariantCulture), "事件数据原始值直接显示", ParseStatus.Success, null),
+            _ when samples.ContainsKey(512) =>
+                (string.Empty, "当前无故障/报警，本字段为空", ParseStatus.Success, null),
+            _ =>
+                ($"0x{raw:X}", "缺少事件类别", ParseStatus.InvalidData, "无法确定事件类别"),
+        };
     }
 
     /// <summary>
@@ -244,8 +252,12 @@ public sealed class RegisterParser
                 (string.Empty, "报警仅数据 0 有效，本字段为空", ParseStatus.Success, null),
             FaultRecordType.Fault =>
                 (raw.ToString(CultureInfo.InvariantCulture), "故障数据 3 原始值直接显示", ParseStatus.Success, null),
+            FaultRecordType.StateChange =>
+                (raw.ToString(CultureInfo.InvariantCulture), "变位事件数据原始值直接显示", ParseStatus.Success, null),
+            _ when samples.ContainsKey(512) =>
+                (string.Empty, "当前无故障/报警，本字段为空", ParseStatus.Success, null),
             _ =>
-                ($"0x{raw:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "事件特定解析尚未完成或协议待确认"),
+                ($"0x{raw:X}", "缺少事件类别", ParseStatus.InvalidData, "无法确定事件类别"),
         };
     }
 
@@ -271,6 +283,8 @@ public sealed class RegisterParser
             FaultRecordType.Fault => DecodeFaultData0(raw, typeCode, samples, controllerSeries),
             FaultRecordType.Alarm => DecodeAlarmData0(raw, typeCode, samples, controllerSeries),
             FaultRecordType.StateChange => ($"0x{raw:X4}", "按 5.5 读取变位记录数据 0 原值", ParseStatus.Success, null),
+            _ when samples.ContainsKey(512) =>
+                (string.Empty, "当前无故障/报警，本字段为空", ParseStatus.Success, null),
             _ => ($"0x{raw:X4}", "无法确定事件类别", ParseStatus.ProtocolUnconfirmed, "当前无有效故障/报警类别"),
         };
     }
@@ -379,6 +393,8 @@ public sealed class RegisterParser
         var phase = phaseCode switch { 0 => "A相", 1 => "B相", 2 => "C相", 3 => "N相", _ => "无特定相别" };
 
         var effectiveType = ResolveEventType(samples, recordType);
+        if (effectiveType is null && samples.ContainsKey(512))
+            return ("无当前故障/报警", "按 512 故障/报警标志判断", ParseStatus.Success, null);
 
         var typeName = effectiveType switch
         {

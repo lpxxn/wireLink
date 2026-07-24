@@ -165,7 +165,7 @@ public sealed class ParserTests
     }
 
     [Fact]
-    public void Fault_additional_data_keeps_raw_value_until_rule_is_confirmed()
+    public void Fault_additional_data_displays_decimal_raw_value_without_warning()
     {
         var definition=RegisterCatalog.DeviceDefinitions.Single(x=>x.Addresses.Contains((ushort)517));
         var value=new RegisterParser().Parse(
@@ -176,8 +176,35 @@ public sealed class ParserTests
                 {517,Sample(517,0x1234)},
             },
             WordOrder.HighWordFirst).Single();
-        Assert.Equal("0x1234",value.Value);
-        Assert.Equal(ParseStatus.ProtocolUnconfirmed,value.Status);
+        Assert.Equal("4660",value.Value);
+        Assert.Equal("事件数据原始值直接显示",value.Formula);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.Null(value.Warning);
+    }
+
+    [Fact]
+    public void No_current_fault_or_alarm_has_no_protocol_warnings()
+    {
+        var definitions=RegisterCatalog.DeviceDefinitions
+            .Where(x=>x.Addresses.Any(address=>address is >=515 and <=523))
+            .ToArray();
+        var samples=new Dictionary<ushort,RawRegisterSample>
+        {
+            {512,Sample(512,0x0002)},
+        };
+        for(ushort address=515;address<=523;address++)
+            samples[address]=Sample(address,0);
+
+        var values=new RegisterParser().Parse(definitions,samples,WordOrder.HighWordFirst);
+        Assert.Equal("无当前故障/报警",
+            values.Single(x=>x.Addresses.Contains((ushort)515)).Value);
+        Assert.All(values.Where(x=>!x.Addresses.Contains((ushort)515)),value=>
+        {
+            Assert.Equal(string.Empty,value.Value);
+            Assert.Equal(ParseStatus.Success,value.Status);
+            Assert.Null(value.Warning);
+        });
+        Assert.All(values,value=>Assert.Equal(ParseStatus.Success,value.Status));
     }
 
     [Fact]

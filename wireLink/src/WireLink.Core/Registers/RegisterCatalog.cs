@@ -83,7 +83,7 @@ public static class RegisterCatalog
 
     private static RegisterDefinition EventAdditional(string name, ushort address) =>
         new(name, [address], RegisterDataType.UInt16, string.Empty, ValueTransform.EventAdditionalData,
-            FormatDescription: "故障按 5.5；报警时为空");
+            FormatDescription: "故障/变位显示原始值；报警时为空");
 
     private static RegisterDefinition EventData3(string name, ushort address) =>
         new(name, [address], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData3Raw,
