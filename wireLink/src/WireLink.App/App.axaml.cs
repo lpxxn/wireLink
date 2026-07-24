@@ -33,7 +33,7 @@ public partial class App : Application
                 new DeviceDataService(client, parser, trace), new FaultRecordService(client, parser),
                 settingsService, trace, settings);
             ApplyTheme(settings.Theme);
-            var mainWindow = new MainWindow(viewModel, new ClosedXmlExportService(), logStore);
+            var mainWindow = new MainWindow(viewModel, client, new ClosedXmlExportService(), logStore);
             desktop.MainWindow = mainWindow;
             desktop.Exit += async (_, _) => await viewModel.DisposeAsync();
 

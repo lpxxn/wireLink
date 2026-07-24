@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
 using WireLink.App.ViewModels;
+using WireLink.Core.Communication;
 using WireLink.Core.Services;
 
 namespace WireLink.App.Views;
@@ -12,6 +13,8 @@ public partial class MainWindow : Window
     private IExcelExportService? _export;
     private ILogStore? _logStore;
     private LogWindow? _logWindow;
+    private RegisterReaderWindow? _registerReaderWindow;
+    private IModbusRtuClient? _client;
 
     public MainWindow()
     {
@@ -19,10 +22,10 @@ public partial class MainWindow : Window
         Opened += OnOpened;
     }
 
-    public MainWindow(MainViewModel viewModel,IExcelExportService export,ILogStore logStore)
+    public MainWindow(MainViewModel viewModel,IModbusRtuClient client,IExcelExportService export,ILogStore logStore)
         : this()
     {
-        DataContext=viewModel; _export=export; _logStore=logStore;
+        DataContext=viewModel; _client=client; _export=export; _logStore=logStore;
         viewModel.ExportRequested+=OnExportRequested;
         viewModel.ShowLogRequested+=(_,_)=>ShowLogWindow();
         viewModel.ThemeChanged+=(_,theme)=>(Avalonia.Application.Current as App)?.ApplyTheme(theme);
@@ -30,7 +33,19 @@ public partial class MainWindow : Window
     }
 
     private void OnPortDropDownOpened(object? sender,EventArgs e) => (DataContext as MainViewModel)?.RefreshPorts();
-    private void OnKeyDown(object? sender,KeyEventArgs e) { if(e.Key==Key.F12) { ShowLogWindow(); e.Handled=true; } }
+    private void OnKeyDown(object? sender,KeyEventArgs e)
+    {
+        if(e.Key==Key.F11 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            ShowRegisterReaderWindow();
+            e.Handled=true;
+        }
+        else if(e.Key==Key.F12)
+        {
+            ShowLogWindow();
+            e.Handled=true;
+        }
+    }
 
     private void OnOpened(object? sender,EventArgs e)
     {
@@ -59,6 +74,15 @@ public partial class MainWindow : Window
         if(_logStore is null) return;
         if(_logWindow is { } existing) { existing.Activate(); return; }
         _logWindow=new LogWindow(_logStore); _logWindow.Closed+=(_,_)=>_logWindow=null; _logWindow.Show(this);
+    }
+
+    private void ShowRegisterReaderWindow()
+    {
+        if(_client is null || DataContext is not MainViewModel mainViewModel) return;
+        if(_registerReaderWindow is { } existing) { existing.Activate(); return; }
+        _registerReaderWindow=new RegisterReaderWindow(new RegisterReaderViewModel(_client,mainViewModel));
+        _registerReaderWindow.Closed+=(_,_)=>_registerReaderWindow=null;
+        _registerReaderWindow.Show(this);
     }
 
     private async void OnExportRequested(object? sender,ExportRequest request)

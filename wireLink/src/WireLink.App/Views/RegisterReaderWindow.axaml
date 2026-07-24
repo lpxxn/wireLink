@@ -1,0 +1,58 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WireLink.App.ViewModels"
+        x:Class="WireLink.App.Views.RegisterReaderWindow"
+        x:DataType="vm:RegisterReaderViewModel"
+        Width="560"
+        Height="390"
+        MinWidth="500"
+        MinHeight="350"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/wirelink-icon.png"
+        Title="寄存器读取">
+  <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="20">
+    <StackPanel Spacing="5">
+      <TextBlock Text="寄存器读取" FontSize="22" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding DeviceText}" Opacity=".58"/>
+    </StackPanel>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+      <StackPanel Spacing="7">
+        <TextBlock Text="寄存器地址" FontWeight="Medium"/>
+        <NumericUpDown Value="{Binding RegisterAddress}"
+                       Minimum="0"
+                       Maximum="65535"
+                       Increment="1"
+                       FormatString="0"
+                       Height="42"/>
+      </StackPanel>
+      <Button Grid.Column="1"
+              VerticalAlignment="Bottom"
+              Height="42"
+              Padding="24,0"
+              Classes="primary"
+              Command="{Binding ReadCommand}"
+              IsEnabled="{Binding CanRead}"
+              Content="读取"/>
+    </Grid>
+
+    <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="14">
+      <Border Background="#F5F7FB" BorderBrush="#E1E6EF" BorderThickness="1" CornerRadius="10" Padding="16">
+        <StackPanel Spacing="8">
+          <TextBlock Text="数据原值" Opacity=".58"/>
+          <TextBlock Text="{Binding RawValue}" FontSize="24" FontWeight="SemiBold" FontFamily="Consolas,monospace"/>
+        </StackPanel>
+      </Border>
+      <Border Grid.Column="1" Background="#F5F7FB" BorderBrush="#E1E6EF" BorderThickness="1" CornerRadius="10" Padding="16">
+        <StackPanel Spacing="8">
+          <TextBlock Text="十进制值" Opacity=".58"/>
+          <TextBlock Text="{Binding DecimalValue}" FontSize="24" FontWeight="SemiBold" FontFamily="Consolas,monospace"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Border Grid.Row="3" Background="#EEF3FF" CornerRadius="8" Padding="12" VerticalAlignment="Top">
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+    </Border>
+  </Grid>
+</Window>

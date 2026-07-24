@@ -19,6 +19,11 @@ Remove-Item "publish/app-win-x64" -Recurse -Force -ErrorAction SilentlyContinue
 
 dotnet publish src/WireLink.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish/app-win-x64
 
+
+dotnet publish src/WireLink.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -o publish/app-win-x64
+
+
+
 ```
 
 正式应用包不复制 Simulator。跨 OS publish 能生成文件，但发布前应在目标 OS 启动和连接串口验证。
