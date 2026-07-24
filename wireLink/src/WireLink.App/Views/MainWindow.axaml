@@ -240,11 +240,6 @@
                           SelectedItem="{Binding ControllerName}"
                           IsEnabled="{Binding IsSerialOpen}"
                           HorizontalAlignment="Stretch"/>
-                <TextBlock Classes="label" Text="uint32 字序"/>
-                <ComboBox Classes="input"
-                          ItemsSource="{Binding WordOrders}"
-                          SelectedItem="{Binding WordOrder}"
-                          HorizontalAlignment="Stretch"/>
                 <TextBlock Classes="label" Text="请求超时（ms）" Margin="0,4,0,0"/>
                 <NumericUpDown Classes="input"
                                Value="{Binding ReadTimeoutMilliseconds}"

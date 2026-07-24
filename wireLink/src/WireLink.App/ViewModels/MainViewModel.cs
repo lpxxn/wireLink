@@ -34,7 +34,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _showAddressRequired;
     private string _notice = "请选择串口并打开";
     private AppThemeMode _theme;
-    private WordOrder _wordOrder;
     private string _controllerName;
     private DateTimeOffset _deviceReadAt;
     private DateTimeOffset _faultReadAt;
@@ -45,7 +44,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _client=client; _ports=ports; _deviceService=deviceService; _faultService=faultService;
         _settingsService=settingsService; _trace=trace;
         _portName=settings.PortName; _baudRate=settings.BaudRate; _deviceAddress=settings.DeviceAddress;
-        _refreshSeconds=settings.RefreshSeconds; _theme=settings.Theme; _wordOrder=settings.WordOrder;
+        _refreshSeconds=settings.RefreshSeconds; _theme=settings.Theme;
         _controllerName=settings.ControllerSeries == BreakerSeries.BW3 ? "BW3 的控制器" : "BW1 的控制器";
         _readTimeoutMilliseconds=settings.ReadTimeoutMilliseconds; _faultDelayMilliseconds=settings.FaultReadyDelayMilliseconds;
         RefreshPortsCommand=ReactiveCommand.Create(RefreshPorts);
@@ -63,7 +62,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public ObservableCollection<string> PortNames { get; }=[];
     public IReadOnlyList<int> BaudRates { get; }=[9600,19200,38400,115200];
-    public IReadOnlyList<WordOrder> WordOrders { get; }=Enum.GetValues<WordOrder>();
     public IReadOnlyList<AppThemeMode> Themes { get; }=Enum.GetValues<AppThemeMode>();
     public IReadOnlyList<string> ControllerOptions { get; }=["BW1 的控制器","BW3 的控制器"];
     public ObservableCollection<DataRowViewModel> DeviceRows { get; }=[];
@@ -104,7 +102,6 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
     private BreakerSeries SelectedControllerSeries =>
         ControllerName == "BW3 的控制器" ? BreakerSeries.BW3 : BreakerSeries.BW1;
-    public WordOrder WordOrder { get=>_wordOrder; set { this.RaiseAndSetIfChanged(ref _wordOrder,value); _=SaveSettingsAsync(); } }
     public AppThemeMode Theme { get=>_theme; set { this.RaiseAndSetIfChanged(ref _theme,value); ThemeChanged?.Invoke(this,value); _=SaveSettingsAsync(); } }
     public bool IsSerialOpen { get=>_isSerialOpen; private set { this.RaiseAndSetIfChanged(ref _isSerialOpen,value); RaiseState(); } }
     public bool IsDeviceConnected { get=>_isDeviceConnected; private set { this.RaiseAndSetIfChanged(ref _isDeviceConnected,value); RaiseState(); } }
@@ -171,7 +168,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if(DeviceAddress is not int address) return;
         await RunBusyAsync(async token =>
         {
-            var result=await _deviceService.ReadAsync((byte)address,WordOrder,SelectedControllerSeries,token);
+            var result=await _deviceService.ReadAsync(
+                (byte)address,WordOrder.HighWordFirst,SelectedControllerSeries,token);
             Merge(DeviceRows,result.Values,result.Errors.Count>0 ? "本区间读取失败，显示上次成功值" : null);
             _deviceReadAt=result.ReadAt;
             if(result.Errors.Count>0)
@@ -190,7 +188,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await RunBusyAsync(async token =>
         {
             var result=await _faultService.ReadAsync((byte)address,FaultRecordType.Fault,0,
-                WordOrder,SelectedControllerSeries,TimeSpan.FromMilliseconds(FaultDelayMilliseconds),token);
+                WordOrder.HighWordFirst,SelectedControllerSeries,
+                TimeSpan.FromMilliseconds(FaultDelayMilliseconds),token);
             if(result.Errors.Count>0) throw new ModbusProtocolException(result.Errors[0]);
             Merge(FaultRows,result.Values,null); _faultReadAt=result.ReadAt;
             Notice="故障记录 0 已读取";
@@ -255,7 +254,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         .ToArray();
 
     private Task SaveSettingsAsync()=>_settingsService.SaveAsync(new AppSettings(
-        PortName,BaudRate,(byte)(DeviceAddress ?? 1),RefreshSeconds,Theme,WordOrder,
+        PortName,BaudRate,(byte)(DeviceAddress ?? 1),RefreshSeconds,Theme,WordOrder.HighWordFirst,
         ReadTimeoutMilliseconds,FaultDelayMilliseconds,SelectedControllerSeries));
     private void SetAddressRequired(bool value)
     {
