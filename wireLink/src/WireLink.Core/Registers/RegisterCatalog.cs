@@ -12,6 +12,7 @@ public static class RegisterCatalog
     [
         new(256, 3),
         new(268, 3),
+        new(279, 1),
         new(336, 8),
         new(352, 6),
         new(432, 2),
@@ -28,6 +29,8 @@ public static class RegisterCatalog
         Current("A 相电流", 268),
         Current("B 相电流", 269),
         Current("C 相电流", 270),
+        new("当前热容", [279], RegisterDataType.UInt16, "%", ValueTransform.Percent,
+            FormatDescription: "百分比原值直接显示"),
         UInt32("高精度电流测量 Ia", 336, 337, "A", 0.01m),
         UInt32("高精度电流测量 Ib", 338, 339, "A", 0.01m),
         UInt32("高精度电流测量 Ic", 340, 341, "A", 0.01m),

@@ -73,6 +73,24 @@ public sealed class ParserTests
     }
 
     [Fact]
+    public void Thermal_capacity_is_after_c_phase_current_and_uses_percent_display()
+    {
+        var definitions=RegisterCatalog.DeviceDefinitions;
+        var currentIndex=definitions.ToList().FindIndex(x=>x.Name=="C 相电流");
+        var thermalIndex=definitions.ToList().FindIndex(x=>x.Name=="当前热容");
+        Assert.Equal(currentIndex+1,thermalIndex);
+
+        var definition=definitions[thermalIndex];
+        Assert.Equal([(ushort)279],definition.Addresses);
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>{{279,Sample(279,68)}},
+            WordOrder.HighWordFirst).Single();
+        Assert.Equal("68%",value.DisplayValue);
+        Assert.Equal(ParseStatus.Success,value.Status);
+    }
+
+    [Fact]
     public void Invalid_rated_current_ordinal_is_rejected()
     {
         var current=RegisterCatalog.DeviceDefinitions.Single(x=>x.Name=="A 相电流");
