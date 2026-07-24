@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
@@ -12,7 +13,11 @@ public partial class MainWindow : Window
     private ILogStore? _logStore;
     private LogWindow? _logWindow;
 
-    public MainWindow() => InitializeComponent();
+    public MainWindow()
+    {
+        InitializeComponent();
+        Opened += OnOpened;
+    }
 
     public MainWindow(MainViewModel viewModel,IExcelExportService export,ILogStore logStore)
         : this()
@@ -26,6 +31,29 @@ public partial class MainWindow : Window
 
     private void OnPortDropDownOpened(object? sender,EventArgs e) => (DataContext as MainViewModel)?.RefreshPorts();
     private void OnKeyDown(object? sender,KeyEventArgs e) { if(e.Key==Key.F12) { ShowLogWindow(); e.Handled=true; } }
+
+    private void OnOpened(object? sender,EventArgs e)
+    {
+        Opened -= OnOpened;
+
+        var screen=Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if(screen is null) return;
+
+        // Window dimensions are device-independent pixels, while WorkingArea uses
+        // physical pixels. Leave room for the native title bar and window border.
+        var scaling=screen.Scaling;
+        var maxWidth=Math.Max(MinWidth,(screen.WorkingArea.Width/scaling)-32);
+        var maxHeight=Math.Max(MinHeight,(screen.WorkingArea.Height/scaling)-48);
+        Width=Math.Min(Width,maxWidth);
+        Height=Math.Min(Height,maxHeight);
+
+        var physicalWidth=(int)Math.Ceiling(Width*scaling);
+        var physicalHeight=(int)Math.Ceiling((Height+32)*scaling);
+        Position=new PixelPoint(
+            screen.WorkingArea.X+Math.Max(0,(screen.WorkingArea.Width-physicalWidth)/2),
+            screen.WorkingArea.Y+Math.Max(0,(screen.WorkingArea.Height-physicalHeight)/2));
+    }
+
     private void ShowLogWindow()
     {
         if(_logStore is null) return;

@@ -6,7 +6,7 @@
         Width="1360"
         Height="850"
         MinWidth="1040"
-        MinHeight="680"
+        MinHeight="600"
         ShowInTaskbar="True"
         WindowStartupLocation="CenterScreen"
         Title="WireLink · RS485 设备通信工具">
@@ -129,7 +129,24 @@
     <Grid ColumnDefinitions="292,*" ColumnSpacing="18" Margin="18">
       <!-- 左侧控制台：按原型将串口与设备设置收拢为一张控制卡。 -->
       <Border Classes="panel" Padding="20">
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+          <ScrollViewer.Styles>
+            <Style Selector="ScrollBar:vertical">
+              <Setter Property="Width" Value="4"/>
+              <Setter Property="MinWidth" Value="4"/>
+              <Setter Property="Background" Value="Transparent"/>
+              <Setter Property="Opacity" Value=".28"/>
+            </Style>
+            <Style Selector="ScrollBar:vertical:pointerover">
+              <Setter Property="Opacity" Value=".58"/>
+            </Style>
+            <Style Selector="ScrollBar:vertical /template/ Thumb">
+              <Setter Property="MinWidth" Value="4"/>
+              <Setter Property="CornerRadius" Value="2"/>
+              <Setter Property="Background" Value="#64748B"/>
+            </Style>
+          </ScrollViewer.Styles>
           <StackPanel Spacing="18">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
               <Border Classes="icon-tile">
@@ -189,14 +206,14 @@
             </Grid>
 
             <StackPanel Spacing="8">
-              <TextBlock Classes="label" Text="设备地址"/>
+              <!--<TextBlock Classes="label" Text="设备地址"/> -->
               <NumericUpDown Classes="input"
                              Value="{Binding DeviceAddress}"
                              Minimum="1"
                              Maximum="255"
                              Increment="1"
                              IsEnabled="{Binding IsSerialOpen}"/>
-              <TextBlock Classes="caption" Text="{Binding AddressHint}"/>
+              <TextBlock Classes="caption" Text="{Binding AddressHint}" Foreground="{Binding AddressHintBrush}"/>
             </StackPanel>
 
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
@@ -295,36 +312,36 @@
               </Border>
 
               <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                  <ItemsControl ItemsSource="{Binding DeviceRows}" MinWidth="760">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:DataRowViewModel">
-                        <Grid ColumnDefinitions="2*,1.15*,2*,1.15*" MinHeight="44">
-                          <Border BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
-                            <TextBlock Text="{Binding Left.Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                              <ToolTip.Tip><TextBlock Text="{Binding Left.Tooltip}"/></ToolTip.Tip>
-                            </TextBlock>
-                          </Border>
-                          <Border Grid.Column="1" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                              <TextBlock Text="{Binding Left.DisplayValue}" VerticalAlignment="Center" FontWeight="Medium"/>
-                              <TextBlock Text="⚠" IsVisible="{Binding Left.HasWarning}" Foreground="#E4A11B" ToolTip.Tip="{Binding Left.Warning}"/>
-                            </StackPanel>
-                          </Border>
-                          <Border Grid.Column="2" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
-                            <TextBlock Text="{Binding Right.Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                              <ToolTip.Tip><TextBlock Text="{Binding Right.Tooltip}"/></ToolTip.Tip>
-                            </TextBlock>
-                          </Border>
-                          <Border Grid.Column="3" BorderBrush="#E6EAF2" BorderThickness="1,0,1,1" Padding="14,9">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                              <TextBlock Text="{Binding Right.DisplayValue}" VerticalAlignment="Center" FontWeight="Medium"/>
-                              <TextBlock Text="⚠" IsVisible="{Binding Right.HasWarning}" Foreground="#E4A11B" ToolTip.Tip="{Binding Right.Warning}"/>
-                            </StackPanel>
-                          </Border>
-                        </Grid>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
+                <ItemsControl ItemsSource="{Binding DeviceRows}" MinWidth="760">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DataRowViewModel">
+                      <Grid ColumnDefinitions="2*,1.15*,2*,1.15*" MinHeight="44">
+                        <Border BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                          <TextBlock Text="{Binding Left.Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                            <ToolTip.Tip><TextBlock Text="{Binding Left.Tooltip}"/></ToolTip.Tip>
+                          </TextBlock>
+                        </Border>
+                        <Border Grid.Column="1" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Left.DisplayValue}" VerticalAlignment="Center" FontWeight="Medium"/>
+                            <TextBlock Text="⚠" IsVisible="{Binding Left.HasWarning}" Foreground="#E4A11B" ToolTip.Tip="{Binding Left.Warning}"/>
+                          </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                          <TextBlock Text="{Binding Right.Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                            <ToolTip.Tip><TextBlock Text="{Binding Right.Tooltip}"/></ToolTip.Tip>
+                          </TextBlock>
+                        </Border>
+                        <Border Grid.Column="3" BorderBrush="#E6EAF2" BorderThickness="1,0,1,1" Padding="14,9">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Right.DisplayValue}" VerticalAlignment="Center" FontWeight="Medium"/>
+                            <TextBlock Text="⚠" IsVisible="{Binding Right.HasWarning}" Foreground="#E4A11B" ToolTip.Tip="{Binding Right.Warning}"/>
+                          </StackPanel>
+                        </Border>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
               </ScrollViewer>
             </Grid>
           </TabItem>

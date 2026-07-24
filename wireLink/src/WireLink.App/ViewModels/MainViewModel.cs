@@ -22,7 +22,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private CancellationTokenSource? _autoRefreshCancellation;
     private string _portName;
     private int _baudRate;
-    private int _deviceAddress;
+    private int? _deviceAddress;
     private int _refreshSeconds;
     private int _readTimeoutMilliseconds;
     private int _faultDelayMilliseconds;
@@ -31,6 +31,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _isBusy;
     private bool _autoRefresh;
     private int _consecutiveFailures;
+    private bool _showAddressRequired;
     private string _notice = "请选择串口并打开";
     private AppThemeMode _theme;
     private WordOrder _wordOrder;
@@ -81,8 +82,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string PortName { get=>_portName; set=>this.RaiseAndSetIfChanged(ref _portName,value); }
     public int BaudRate { get=>_baudRate; set=>this.RaiseAndSetIfChanged(ref _baudRate,value); }
-    public int DeviceAddress { get=>_deviceAddress; set=>this.RaiseAndSetIfChanged(ref _deviceAddress,Math.Clamp(value,1,255)); }
-    public string AddressHint => "Modbus 从机地址（1～255）";
+    public int? DeviceAddress
+    {
+        get=>_deviceAddress;
+        set
+        {
+            int? address=value is null ? null : Math.Clamp(value.Value,1,255);
+            this.RaiseAndSetIfChanged(ref _deviceAddress,address);
+            if(address is not null) SetAddressRequired(false);
+        }
+    }
+    public string AddressHint => _showAddressRequired ? "设备地址不能为空" : "Modbus 从机地址（1～255）";
+    public IBrush AddressHintBrush => _showAddressRequired ? Brushes.IndianRed : Brushes.Gray;
     public int RefreshSeconds { get=>_refreshSeconds; set=>this.RaiseAndSetIfChanged(ref _refreshSeconds,Math.Clamp(value,1,3600)); }
     public int ReadTimeoutMilliseconds { get=>_readTimeoutMilliseconds; set=>this.RaiseAndSetIfChanged(ref _readTimeoutMilliseconds,Math.Clamp(value,100,10000)); }
     public int FaultDelayMilliseconds { get=>_faultDelayMilliseconds; set=>this.RaiseAndSetIfChanged(ref _faultDelayMilliseconds,Math.Clamp(value,0,2000)); }
@@ -141,19 +152,26 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task TestConnectionAsync()
     {
         if(!CanTest) return;
+        if(DeviceAddress is not int address)
+        {
+            SetAddressRequired(true);
+            Notice="设备地址不能为空";
+            return;
+        }
         await RunBusyAsync(async token =>
         {
-            if(await _deviceService.TestConnectionAsync((byte)DeviceAddress,token))
-            { IsDeviceConnected=true; _consecutiveFailures=0; Notice=$"设备 {DeviceAddress} 连接测试成功"; await SaveSettingsAsync(); }
+            if(await _deviceService.TestConnectionAsync((byte)address,token))
+            { IsDeviceConnected=true; _consecutiveFailures=0; Notice=$"设备 {address} 连接测试成功"; await SaveSettingsAsync(); }
         },"连接测试失败", disconnectOnError:true);
     }
 
     private async Task ReadDeviceAsync()
     {
         if(!CanRead) return;
+        if(DeviceAddress is not int address) return;
         await RunBusyAsync(async token =>
         {
-            var result=await _deviceService.ReadAsync((byte)DeviceAddress,WordOrder,SelectedControllerSeries,token);
+            var result=await _deviceService.ReadAsync((byte)address,WordOrder,SelectedControllerSeries,token);
             Merge(DeviceRows,result.Values,result.Errors.Count>0 ? "本区间读取失败，显示上次成功值" : null);
             _deviceReadAt=result.ReadAt;
             if(result.Errors.Count>0)
@@ -168,9 +186,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task ReadFaultAsync()
     {
         if(!CanRead) return;
+        if(DeviceAddress is not int address) return;
         await RunBusyAsync(async token =>
         {
-            var result=await _faultService.ReadAsync((byte)DeviceAddress,FaultRecordType.Fault,0,
+            var result=await _faultService.ReadAsync((byte)address,FaultRecordType.Fault,0,
                 WordOrder,SelectedControllerSeries,TimeSpan.FromMilliseconds(FaultDelayMilliseconds),token);
             if(result.Errors.Count>0) throw new ModbusProtocolException(result.Errors[0]);
             Merge(FaultRows,result.Values,null); _faultReadAt=result.ReadAt;
@@ -236,8 +255,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         .ToArray();
 
     private Task SaveSettingsAsync()=>_settingsService.SaveAsync(new AppSettings(
-        PortName,BaudRate,(byte)DeviceAddress,RefreshSeconds,Theme,WordOrder,
+        PortName,BaudRate,(byte)(DeviceAddress ?? 1),RefreshSeconds,Theme,WordOrder,
         ReadTimeoutMilliseconds,FaultDelayMilliseconds,SelectedControllerSeries));
+    private void SetAddressRequired(bool value)
+    {
+        if(_showAddressRequired==value) return;
+        _showAddressRequired=value;
+        this.RaisePropertyChanged(nameof(AddressHint));
+        this.RaisePropertyChanged(nameof(AddressHintBrush));
+    }
     private void RaiseState()
     {
         foreach(var name in new[]{nameof(SerialButtonText),nameof(SerialStatusText),nameof(DeviceStatusText),nameof(SerialStatusBrush),nameof(DeviceStatusBrush),nameof(CanConfigureSerial),nameof(CanTest),nameof(CanRead),nameof(CanExportDevice),nameof(CanExportFault)}) this.RaisePropertyChanged(name);
