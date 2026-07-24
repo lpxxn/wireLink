@@ -31,6 +31,7 @@ public enum ValueTransform
     AlarmBits,
     CurrentEvent,
     EventData0,
+    EventAdditionalData,
     RawUnconfirmed,
     BcdYearMonth,
     BcdDayHour,

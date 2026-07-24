@@ -91,6 +91,7 @@ public sealed class RegisterParser
                 ValueTransform.AlarmBits => (DecodeAlarmBits(numeric), "按 5.3 位字段解析", definition.ProtocolConfirmed ? ParseStatus.Success : ParseStatus.ProtocolUnconfirmed, definition.ProtocolConfirmed ? null : "uint32 字序未确认"),
                 ValueTransform.CurrentEvent => DecodeEvent((ushort)numeric, allSamples, recordType),
                 ValueTransform.EventData0 => DecodeEventData0((ushort)numeric, allSamples, recordType, controllerSeries),
+                ValueTransform.EventAdditionalData => DecodeAdditionalEventData(numeric, allSamples, recordType),
                 ValueTransform.RawUnconfirmed => ($"0x{numeric:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "事件特定解析尚未完成或协议待确认"),
                 ValueTransform.BcdYearMonth => DecodeBcdPair((ushort)numeric, "年", "月", 2000),
                 ValueTransform.BcdDayHour => DecodeBcdPair((ushort)numeric, "日", "时", 0),
@@ -211,6 +212,22 @@ public sealed class RegisterParser
     }
 
     /// <summary>
+    /// 报警事件按已确认的 5.5.2 规则只有数据 0 有效：
+    /// 当前报警的 517～523、历史报警的 773～779 均返回空显示值。
+    /// 故障和变位事件仍保留原值，等待各字段规则继续补齐。
+    /// </summary>
+    private static (string, string, ParseStatus, string?) DecodeAdditionalEventData(
+        uint raw,
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        FaultRecordType? recordType)
+    {
+        var effectiveType = ResolveEventType(samples, recordType);
+        return effectiveType == FaultRecordType.Alarm
+            ? (string.Empty, "报警仅数据 0 有效，本字段为空", ParseStatus.Success, null)
+            : ($"0x{raw:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "事件特定解析尚未完成或协议待确认");
+    }
+
+    /// <summary>
     /// 解析 5.5 表中的事件数据 0。电流事件使用控制器系列和寄存器 787 的额定电流序值计算变比；
     /// 百分比按用户确认后的规则直接显示原值，不再除以 100。
     /// </summary>
@@ -225,14 +242,7 @@ public sealed class RegisterParser
             return ($"0x{raw:X4}", "缺少事件类型", ParseStatus.InvalidData, $"未读取到寄存器 {eventAddress}");
 
         var typeCode = (byte)(eventSample.Value >> 8);
-        var effectiveType = recordType;
-        if (effectiveType is null && samples.TryGetValue(512, out var runStatus))
-        {
-            var hasAlarm = (runStatus.Value & (1 << 2)) != 0;
-            var hasFault = (runStatus.Value & (1 << 3)) != 0;
-            // bit3 是“故障跳闸标志”，优先级高于普通报警标志；两者同时为 1 时按故障解析。
-            effectiveType = hasFault ? FaultRecordType.Fault : hasAlarm ? FaultRecordType.Alarm : null;
-        }
+        var effectiveType = ResolveEventType(samples, recordType);
 
         return effectiveType switch
         {
@@ -346,14 +356,7 @@ public sealed class RegisterParser
         var typeCode = value >> 8;
         var phase = phaseCode switch { 0 => "A相", 1 => "B相", 2 => "C相", 3 => "N相", _ => "无特定相别" };
 
-        var effectiveType = recordType;
-        if (effectiveType is null && samples.TryGetValue(512, out var runStatus))
-        {
-            var hasAlarm = (runStatus.Value & (1 << 2)) != 0;
-            var hasFault = (runStatus.Value & (1 << 3)) != 0;
-            // bit3 表示已发生故障跳闸；即使 bit2 同时表示有报警，当前事件仍按故障表解释。
-            effectiveType = hasFault ? FaultRecordType.Fault : hasAlarm ? FaultRecordType.Alarm : null;
-        }
+        var effectiveType = ResolveEventType(samples, recordType);
 
         var typeName = effectiveType switch
         {
@@ -366,6 +369,22 @@ public sealed class RegisterParser
         var status = effectiveType is null ? ParseStatus.ProtocolUnconfirmed : ParseStatus.Success;
         var warning = status == ParseStatus.Success ? null : "当前没有有效的故障或报警标志";
         return ($"{phase} / {typeName}", "L=相别，H=类型", status, warning);
+    }
+
+    private static FaultRecordType? ResolveEventType(
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        FaultRecordType? recordType)
+    {
+        if (recordType is not null)
+            return recordType;
+
+        if (!samples.TryGetValue(512, out var runStatus))
+            return null;
+
+        var hasAlarm = (runStatus.Value & (1 << 2)) != 0;
+        var hasFault = (runStatus.Value & (1 << 3)) != 0;
+        // bit3 表示故障跳闸，优先级高于 bit2 报警；两者同时为 1 时按故障解析。
+        return hasFault ? FaultRecordType.Fault : hasAlarm ? FaultRecordType.Alarm : null;
     }
 
     private static string DecodeRecordStatus(ushort value)

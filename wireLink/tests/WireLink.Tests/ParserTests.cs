@@ -133,6 +133,54 @@ public sealed class ParserTests
     }
 
     [Fact]
+    public void Current_alarm_only_data_zero_is_valid()
+    {
+        var definition=RegisterCatalog.DeviceDefinitions.Single(x=>x.Addresses.Contains((ushort)517));
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>
+            {
+                {512,Sample(512,1<<2)},
+                {517,Sample(517,0x1234)},
+            },
+            WordOrder.HighWordFirst).Single();
+        Assert.Equal(string.Empty,value.Value);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.Equal("报警仅数据 0 有效，本字段为空",value.Formula);
+        Assert.Null(value.Warning);
+    }
+
+    [Fact]
+    public void Historical_alarm_only_data_zero_is_valid()
+    {
+        var definition=RegisterCatalog.FaultDefinitions.Single(x=>x.Addresses.Contains((ushort)773));
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>{{773,Sample(773,0x5678)}},
+            WordOrder.HighWordFirst,
+            FaultRecordType.Alarm).Single();
+        Assert.Equal(string.Empty,value.Value);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.Null(value.Warning);
+    }
+
+    [Fact]
+    public void Fault_additional_data_keeps_raw_value_until_rule_is_confirmed()
+    {
+        var definition=RegisterCatalog.DeviceDefinitions.Single(x=>x.Addresses.Contains((ushort)517));
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>
+            {
+                {512,Sample(512,1<<3)},
+                {517,Sample(517,0x1234)},
+            },
+            WordOrder.HighWordFirst).Single();
+        Assert.Equal("0x1234",value.Value);
+        Assert.Equal(ParseStatus.ProtocolUnconfirmed,value.Status);
+    }
+
+    [Fact]
     public void State_change_record_uses_same_event_register_area_without_structure_warning()
     {
         var definitions=RegisterCatalog.FaultDefinitions
