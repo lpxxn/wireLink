@@ -34,8 +34,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _notice = "请选择串口并打开";
     private AppThemeMode _theme;
     private WordOrder _wordOrder;
-    private FaultRecordType _faultRecordType;
-    private int _faultRecordIndex;
+    private string _controllerName;
     private DateTimeOffset _deviceReadAt;
     private DateTimeOffset _faultReadAt;
 
@@ -46,6 +45,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _settingsService=settingsService; _trace=trace;
         _portName=settings.PortName; _baudRate=settings.BaudRate; _deviceAddress=settings.DeviceAddress;
         _refreshSeconds=settings.RefreshSeconds; _theme=settings.Theme; _wordOrder=settings.WordOrder;
+        _controllerName=settings.ControllerSeries == BreakerSeries.BW3 ? "BW3 的控制器" : "BW1 的控制器";
         _readTimeoutMilliseconds=settings.ReadTimeoutMilliseconds; _faultDelayMilliseconds=settings.FaultReadyDelayMilliseconds;
         RefreshPortsCommand=ReactiveCommand.Create(RefreshPorts);
         ToggleSerialCommand=ReactiveCommand.CreateFromTask(ToggleSerialAsync);
@@ -64,7 +64,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public IReadOnlyList<int> BaudRates { get; }=[9600,19200,38400,115200];
     public IReadOnlyList<WordOrder> WordOrders { get; }=Enum.GetValues<WordOrder>();
     public IReadOnlyList<AppThemeMode> Themes { get; }=Enum.GetValues<AppThemeMode>();
-    public IReadOnlyList<FaultRecordType> FaultRecordTypes { get; }=Enum.GetValues<FaultRecordType>();
+    public IReadOnlyList<string> ControllerOptions { get; }=["BW1 的控制器","BW3 的控制器"];
     public ObservableCollection<DataRowViewModel> DeviceRows { get; }=[];
     public ObservableCollection<DataRowViewModel> FaultRows { get; }=[];
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> RefreshPortsCommand { get; }
@@ -81,13 +81,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public string PortName { get=>_portName; set=>this.RaiseAndSetIfChanged(ref _portName,value); }
     public int BaudRate { get=>_baudRate; set=>this.RaiseAndSetIfChanged(ref _baudRate,value); }
-    public int DeviceAddress { get=>_deviceAddress; set { this.RaiseAndSetIfChanged(ref _deviceAddress,Math.Clamp(value,1,255)); this.RaisePropertyChanged(nameof(AddressHint)); } }
-    public string AddressHint => DeviceAddress > 99 ? "协议范围未确认（暂允许 1～255）" : "Modbus 从机地址";
+    public int DeviceAddress { get=>_deviceAddress; set=>this.RaiseAndSetIfChanged(ref _deviceAddress,Math.Clamp(value,1,255)); }
+    public string AddressHint => "Modbus 从机地址（1～255）";
     public int RefreshSeconds { get=>_refreshSeconds; set=>this.RaiseAndSetIfChanged(ref _refreshSeconds,Math.Clamp(value,1,3600)); }
     public int ReadTimeoutMilliseconds { get=>_readTimeoutMilliseconds; set=>this.RaiseAndSetIfChanged(ref _readTimeoutMilliseconds,Math.Clamp(value,100,10000)); }
     public int FaultDelayMilliseconds { get=>_faultDelayMilliseconds; set=>this.RaiseAndSetIfChanged(ref _faultDelayMilliseconds,Math.Clamp(value,0,2000)); }
-    public int FaultRecordIndex { get=>_faultRecordIndex; set=>this.RaiseAndSetIfChanged(ref _faultRecordIndex,Math.Clamp(value,0,15)); }
-    public FaultRecordType FaultRecordType { get=>_faultRecordType; set=>this.RaiseAndSetIfChanged(ref _faultRecordType,value); }
+    public string ControllerName
+    {
+        get=>_controllerName;
+        set { this.RaiseAndSetIfChanged(ref _controllerName,value); _=SaveSettingsAsync(); }
+    }
+    private BreakerSeries SelectedControllerSeries =>
+        ControllerName == "BW3 的控制器" ? BreakerSeries.BW3 : BreakerSeries.BW1;
     public WordOrder WordOrder { get=>_wordOrder; set { this.RaiseAndSetIfChanged(ref _wordOrder,value); _=SaveSettingsAsync(); } }
     public AppThemeMode Theme { get=>_theme; set { this.RaiseAndSetIfChanged(ref _theme,value); ThemeChanged?.Invoke(this,value); _=SaveSettingsAsync(); } }
     public bool IsSerialOpen { get=>_isSerialOpen; private set { this.RaiseAndSetIfChanged(ref _isSerialOpen,value); RaiseState(); } }
@@ -148,7 +153,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if(!CanRead) return;
         await RunBusyAsync(async token =>
         {
-            var result=await _deviceService.ReadAsync((byte)DeviceAddress,WordOrder,token);
+            var result=await _deviceService.ReadAsync((byte)DeviceAddress,WordOrder,SelectedControllerSeries,token);
             Merge(DeviceRows,result.Values,result.Errors.Count>0 ? "本区间读取失败，显示上次成功值" : null);
             _deviceReadAt=result.ReadAt;
             if(result.Errors.Count>0)
@@ -165,11 +170,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if(!CanRead) return;
         await RunBusyAsync(async token =>
         {
-            var result=await _faultService.ReadAsync((byte)DeviceAddress,FaultRecordType,(byte)FaultRecordIndex,
-                WordOrder,TimeSpan.FromMilliseconds(FaultDelayMilliseconds),token);
+            var result=await _faultService.ReadAsync((byte)DeviceAddress,FaultRecordType.Fault,0,
+                WordOrder,SelectedControllerSeries,TimeSpan.FromMilliseconds(FaultDelayMilliseconds),token);
             if(result.Errors.Count>0) throw new ModbusProtocolException(result.Errors[0]);
             Merge(FaultRows,result.Values,null); _faultReadAt=result.ReadAt;
-            Notice=$"{FaultRecordType} / 记录 {FaultRecordIndex} 已读取";
+            Notice="故障记录 0 已读取";
         },"读取故障记录失败");
     }
 
@@ -224,13 +229,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private void RequestDeviceExport() { if(CanExportDevice) ExportRequested?.Invoke(this,new ExportRequest("设备数据",Flatten(DeviceRows),_deviceReadAt)); }
-    private void RequestFaultExport() { if(CanExportFault) ExportRequested?.Invoke(this,new ExportRequest("故障数据",Flatten(FaultRows),_faultReadAt,FaultRecordType,(byte)FaultRecordIndex)); }
+    private void RequestFaultExport() { if(CanExportFault) ExportRequested?.Invoke(this,new ExportRequest("故障数据",Flatten(FaultRows),_faultReadAt,FaultRecordType.Fault,0)); }
     private static IReadOnlyList<DecodedValue> Flatten(IEnumerable<DataRowViewModel> rows)=>rows.SelectMany(r=>new[]{r.Left,r.Right}.OfType<DataItemViewModel>()).Select(x=>x.Value).ToArray();
     private static IReadOnlyList<DecodedValue> CreatePlaceholders(IEnumerable<RegisterDefinition> definitions)=>definitions
         .Select(definition=>new DecodedValue(definition.Name,definition.Addresses,"—",definition.Unit,"尚未读取",[],ParseStatus.ReadFailed,"尚未读取",DateTimeOffset.MinValue))
         .ToArray();
 
-    private Task SaveSettingsAsync()=>_settingsService.SaveAsync(new AppSettings(PortName,BaudRate,(byte)DeviceAddress,RefreshSeconds,Theme,WordOrder,ReadTimeoutMilliseconds,FaultDelayMilliseconds));
+    private Task SaveSettingsAsync()=>_settingsService.SaveAsync(new AppSettings(
+        PortName,BaudRate,(byte)DeviceAddress,RefreshSeconds,Theme,WordOrder,
+        ReadTimeoutMilliseconds,FaultDelayMilliseconds,SelectedControllerSeries));
     private void RaiseState()
     {
         foreach(var name in new[]{nameof(SerialButtonText),nameof(SerialStatusText),nameof(DeviceStatusText),nameof(SerialStatusBrush),nameof(DeviceStatusBrush),nameof(CanConfigureSerial),nameof(CanTest),nameof(CanRead),nameof(CanExportDevice),nameof(CanExportFault)}) this.RaisePropertyChanged(name);

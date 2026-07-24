@@ -47,7 +47,8 @@ public sealed class RegisterParser
         IReadOnlyList<RegisterDefinition> definitions,
         IReadOnlyDictionary<ushort, RawRegisterSample> samples,
         WordOrder wordOrder,
-        FaultRecordType? faultRecordType = null)
+        FaultRecordType? faultRecordType = null,
+        BreakerSeries controllerSeries = BreakerSeries.BW1)
     {
         var values = new List<DecodedValue>(definitions.Count);
         foreach (var definition in definitions)
@@ -62,7 +63,7 @@ public sealed class RegisterParser
                 continue;
             }
 
-            values.Add(ParseOne(definition, raw, samples, wordOrder, faultRecordType));
+            values.Add(ParseOne(definition, raw, samples, wordOrder, faultRecordType, controllerSeries));
         }
 
         return values;
@@ -73,7 +74,8 @@ public sealed class RegisterParser
         RawRegisterSample[] raw,
         IReadOnlyDictionary<ushort, RawRegisterSample> allSamples,
         WordOrder wordOrder,
-        FaultRecordType? recordType)
+        FaultRecordType? recordType,
+        BreakerSeries controllerSeries)
     {
         var timestamp = raw.Max(sample => sample.ReadAt);
         try
@@ -82,24 +84,26 @@ public sealed class RegisterParser
             var (value, formula, status, warning) = definition.Transform switch
             {
                 ValueTransform.Multiply => Scale(numeric, definition.Multiplier, definition.ProtocolConfirmed),
-                ValueTransform.CurrentRatio => ScaleByCurrentRatio(numeric, allSamples),
+                ValueTransform.CurrentRatio => ScaleByCurrentRatio(numeric, allSamples, controllerSeries),
+                ValueTransform.RatedCurrent => DecodeRatedCurrent(numeric, controllerSeries),
                 ValueTransform.Percent => Percent(numeric),
                 ValueTransform.RunStatus => (DecodeRunStatus((ushort)numeric), "按 5.2 位字段解析", ParseStatus.Success, null),
-                ValueTransform.AlarmBits => (DecodeAlarmBits(numeric), "按 5.3 位字段解析", ParseStatus.ProtocolUnconfirmed, "uint32 字序未实机确认"),
+                ValueTransform.AlarmBits => (DecodeAlarmBits(numeric), "按 5.3 位字段解析", definition.ProtocolConfirmed ? ParseStatus.Success : ParseStatus.ProtocolUnconfirmed, definition.ProtocolConfirmed ? null : "uint32 字序未确认"),
                 ValueTransform.CurrentEvent => DecodeEvent((ushort)numeric, allSamples, recordType),
-                ValueTransform.RawUnconfirmed => ($"0x{numeric:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "倍率或事件含义待协议确认"),
+                ValueTransform.EventData0 => DecodeEventData0((ushort)numeric, allSamples, recordType, controllerSeries),
+                ValueTransform.RawUnconfirmed => ($"0x{numeric:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "事件特定解析尚未完成或协议待确认"),
                 ValueTransform.BcdYearMonth => DecodeBcdPair((ushort)numeric, "年", "月", 2000),
                 ValueTransform.BcdDayHour => DecodeBcdPair((ushort)numeric, "日", "时", 0),
                 ValueTransform.BcdMinuteSecond => DecodeBcdPair((ushort)numeric, "分", "秒", 0),
                 ValueTransform.FaultRecordStatus => (DecodeRecordStatus((ushort)numeric), "按 5.6 位字段解析", ParseStatus.Success, null),
-                ValueTransform.RecordSelector => (DecodeSelector((ushort)numeric), "L=类型，H=序号", ParseStatus.Success, "记录新旧顺序待确认"),
+                ValueTransform.RecordSelector => (DecodeSelector((ushort)numeric), "L=类型，H=记录编号", ParseStatus.Success, null),
                 _ => throw new ArgumentOutOfRangeException(),
             };
 
             if (definition.DataType == RegisterDataType.UInt32 && !definition.ProtocolConfirmed)
             {
                 status = ParseStatus.ProtocolUnconfirmed;
-                warning ??= "uint32 字序未实机确认";
+                warning ??= "uint32 字序未确认";
                 formula = $"{formula}；字序={wordOrder}";
             }
 
@@ -160,21 +164,124 @@ public sealed class RegisterParser
 
     private static (string, string, ParseStatus, string?) ScaleByCurrentRatio(
         uint raw,
-        IReadOnlyDictionary<ushort, RawRegisterSample> samples)
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        BreakerSeries controllerSeries)
     {
-        if (!samples.TryGetValue(788, out var ratio))
+        if (!samples.TryGetValue(787, out var ordinalSample))
         {
-            return ($"0x{raw:X}", "缺少电流变比", ParseStatus.InvalidData, "未读取到寄存器 788");
+            return ($"0x{raw:X}", "缺少额定电流序值", ParseStatus.InvalidData, "未读取到寄存器 787");
         }
 
-        var value = raw * (decimal)ratio.Value;
-        return (value.ToString("0", CultureInfo.InvariantCulture), $"{raw} × 电流变比({ratio.Value})", ParseStatus.Success, null);
+        if (ordinalSample.Value > byte.MaxValue)
+        {
+            return ($"0x{raw:X}", $"寄存器 787={ordinalSample.Value}", ParseStatus.InvalidData,
+                "额定电流序值超出 byte 范围");
+        }
+
+        var ordinal = (byte)ordinalSample.Value;
+        var ratio = CurrentRatioRule.Calculate(controllerSeries, ordinal);
+        var ratedCurrent = CurrentRatioRule.GetRatedCurrent(controllerSeries, ordinal);
+        var value = raw * (decimal)ratio;
+        return (
+            value.ToString("0", CultureInfo.InvariantCulture),
+            $"{raw} × 电流变比(×{ratio}；{controllerSeries} 序值 {ordinal}={ratedCurrent}A)",
+            ParseStatus.Success,
+            null);
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeRatedCurrent(
+        uint raw,
+        BreakerSeries controllerSeries)
+    {
+        if (raw > byte.MaxValue)
+            return ($"0x{raw:X}", $"寄存器 787={raw}", ParseStatus.InvalidData, "额定电流序值超出 byte 范围");
+
+        var ordinal = (byte)raw;
+        var ratedCurrent = CurrentRatioRule.GetRatedCurrent(controllerSeries, ordinal);
+        return (
+            ratedCurrent.ToString(CultureInfo.InvariantCulture),
+            $"{controllerSeries} 额定电流序值 {ordinal} → {ratedCurrent}A",
+            ParseStatus.Success,
+            null);
     }
 
     private static (string, string, ParseStatus, string?) Percent(uint raw)
     {
-        var value = raw / 100m;
-        return (value.ToString("F2", CultureInfo.InvariantCulture), $"{raw} ÷ 100", ParseStatus.Success, null);
+        return (raw.ToString(CultureInfo.InvariantCulture), "百分比原值直接显示", ParseStatus.Success, null);
+    }
+
+    /// <summary>
+    /// 解析 5.5 表中的事件数据 0。电流事件使用控制器系列和寄存器 787 的额定电流序值计算变比；
+    /// 百分比按用户确认后的规则直接显示原值，不再除以 100。
+    /// </summary>
+    private static (string, string, ParseStatus, string?) DecodeEventData0(
+        ushort raw,
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        FaultRecordType? recordType,
+        BreakerSeries controllerSeries)
+    {
+        var eventAddress = samples.ContainsKey(515) ? (ushort)515 : (ushort)771;
+        if (!samples.TryGetValue(eventAddress, out var eventSample))
+            return ($"0x{raw:X4}", "缺少事件类型", ParseStatus.InvalidData, $"未读取到寄存器 {eventAddress}");
+
+        var typeCode = (byte)(eventSample.Value >> 8);
+        var effectiveType = recordType;
+        if (effectiveType is null && samples.TryGetValue(512, out var runStatus))
+        {
+            var hasAlarm = (runStatus.Value & (1 << 2)) != 0;
+            var hasFault = (runStatus.Value & (1 << 3)) != 0;
+            // bit3 是“故障跳闸标志”，优先级高于普通报警标志；两者同时为 1 时按故障解析。
+            effectiveType = hasFault ? FaultRecordType.Fault : hasAlarm ? FaultRecordType.Alarm : null;
+        }
+
+        return effectiveType switch
+        {
+            FaultRecordType.Fault => DecodeFaultData0(raw, typeCode, samples, controllerSeries),
+            FaultRecordType.Alarm => DecodeAlarmData0(raw, typeCode, samples, controllerSeries),
+            FaultRecordType.StateChange => ($"0x{raw:X4}", "按 5.5 读取变位记录数据 0 原值", ParseStatus.Success, null),
+            _ => ($"0x{raw:X4}", "无法确定事件类别", ParseStatus.ProtocolUnconfirmed, "当前无有效故障/报警类别"),
+        };
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeFaultData0(
+        ushort raw, byte typeCode, IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        BreakerSeries controllerSeries)
+    {
+        // 过载、短路、接地、联锁、最大需用及相应试验事件使用电流变比。
+        int[] ratioTypes = [7, 8, 9, 10, 13, 16, 19, 20, 21, 22, 23, 24, 27, 29, 30];
+        if (ratioTypes.Contains(typeCode)) return EventCurrent(raw, samples, controllerSeries);
+        if (typeCode is 14 or 28) return ($"{raw * 0.01m:0.00} A", $"{raw} × 0.01（漏电）", ParseStatus.Success, null);
+        if (typeCode is 15 or 6) return ($"{raw}%", "百分比原值直接显示", ParseStatus.Success, null);
+        if (typeCode is 4 or 5) return ($"{raw} V", "原值 × 1", ParseStatus.Success, null);
+        if (typeCode is 2 or 3) return ($"{raw * 0.01m:0.00} Hz", $"{raw} × 0.01", ParseStatus.Success, null);
+        if (typeCode == 1) return (raw switch { 1 => "ABC", 2 => "ACB", _ => $"未知相序 {raw}" }, "相序代码", raw is 1 or 2 ? ParseStatus.Success : ParseStatus.InvalidData, raw is 1 or 2 ? null : "未知相序代码");
+        if (typeCode == 17) return ($"{unchecked((short)raw)} kW", "按 int16 有符号值 × 1", ParseStatus.Success, null);
+        return ($"0x{raw:X4}", "该事件数据 0 不计算", ParseStatus.ProtocolUnconfirmed, "该事件的数据 0 含义未实现或无意义");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeAlarmData0(
+        ushort raw, byte typeCode, IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        BreakerSeries controllerSeries)
+    {
+        if (typeCode is 1 or 2 or 3 or 4 or 7) return EventCurrent(raw, samples, controllerSeries);
+        if (typeCode == 5) return ($"{raw * 0.01m:0.00} A", $"{raw} × 0.01（漏电）", ParseStatus.Success, null);
+        if (typeCode is 6 or 8) return ($"{raw}%", "百分比原值直接显示", ParseStatus.Success, null);
+        if (typeCode is 9 or 10) return ($"{raw} V", "原值 × 1", ParseStatus.Success, null);
+        if (typeCode == 11) return ($"{unchecked((short)raw)} kW", "按 int16 有符号值 × 1", ParseStatus.Success, null);
+        if (typeCode is 12 or 13) return ($"{raw * 0.01m:0.00} Hz", $"{raw} × 0.01", ParseStatus.Success, null);
+        if (typeCode == 14) return (raw switch { 1 => "ABC", 2 => "ACB", _ => $"未知相序 {raw}" }, "相序代码", raw is 1 or 2 ? ParseStatus.Success : ParseStatus.InvalidData, raw is 1 or 2 ? null : "未知相序代码");
+        if (typeCode == 21) return ($"{unchecked((short)raw) * 0.1m:0.0} ℃", $"int16({unchecked((short)raw)}) × 0.1", ParseStatus.Success, null);
+        return ($"0x{raw:X4}", "该报警数据 0 不计算", ParseStatus.ProtocolUnconfirmed, "该报警的数据 0 含义未实现或无意义");
+    }
+
+    private static (string, string, ParseStatus, string?) EventCurrent(
+        ushort raw, IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        BreakerSeries controllerSeries)
+    {
+        var result = ScaleByCurrentRatio(raw, samples, controllerSeries);
+        return result.Item3 == ParseStatus.Success
+            ? ($"{result.Item1} A", result.Item2, result.Item3, result.Item4)
+            : result;
     }
 
     private static (string, string, ParseStatus, string?) DecodeBcdPair(ushort value, string highLabel, string lowLabel, int highOffset)
@@ -244,11 +351,7 @@ public sealed class RegisterParser
         {
             var hasAlarm = (runStatus.Value & (1 << 2)) != 0;
             var hasFault = (runStatus.Value & (1 << 3)) != 0;
-            if (hasAlarm && hasFault)
-            {
-                return ($"相别码 {phaseCode} / 类型码 {typeCode}", "未解析", ParseStatus.ProtocolUnconfirmed, "故障和报警同时有效，协议未说明优先级");
-            }
-
+            // bit3 表示已发生故障跳闸；即使 bit2 同时表示有报警，当前事件仍按故障表解释。
             effectiveType = hasFault ? FaultRecordType.Fault : hasAlarm ? FaultRecordType.Alarm : null;
         }
 
@@ -260,10 +363,8 @@ public sealed class RegisterParser
             _ => $"类型码 {typeCode}",
         };
 
-        var status = effectiveType == FaultRecordType.StateChange || effectiveType is null
-            ? ParseStatus.ProtocolUnconfirmed
-            : ParseStatus.Success;
-        var warning = status == ParseStatus.Success ? null : "事件类型规则待补充";
+        var status = effectiveType is null ? ParseStatus.ProtocolUnconfirmed : ParseStatus.Success;
+        var warning = status == ParseStatus.Success ? null : "当前没有有效的故障或报警标志";
         return ($"{phase} / {typeName}", "L=相别，H=类型", status, warning);
     }
 

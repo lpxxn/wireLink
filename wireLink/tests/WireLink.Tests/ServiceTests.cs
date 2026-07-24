@@ -13,10 +13,10 @@ public sealed class ServiceTests
         await using var client=new FakeClient((start,count)=>
         {
             if(start==336) throw new TimeoutException("模拟超时");
-            return Enumerable.Range(start,count).Select(x=>(ushort)(x==788?2:x)).ToArray();
+            return Enumerable.Range(start,count).Select(x=>(ushort)(x==787?11:x)).ToArray();
         });
         var service=new DeviceDataService(client,new RegisterParser());
-        var result=await service.ReadAsync(1,WordOrder.HighWordFirst);
+        var result=await service.ReadAsync(1,WordOrder.HighWordFirst,BreakerSeries.BW1);
         Assert.Single(result.Errors);
         Assert.Contains(result.Values,x=>x.Name=="A 相电压");
         Assert.DoesNotContain(result.Values,x=>x.Name=="高精度电流测量 Ia");
@@ -24,19 +24,20 @@ public sealed class ServiceTests
     }
 
     [Fact]
-    public async Task Fault_read_writes_selector_then_reads_768_through_788()
+    public async Task Fault_read_writes_selector_then_reads_768_through_787()
     {
         await using var client=new FakeClient((start,count)=>
         {
-            Assert.Equal((ushort)768,start); Assert.Equal((ushort)21,count);
-            var raw=new ushort[21]; raw[0]=0x2607; raw[1]=0x2214; raw[2]=0x3009; raw[3]=0x0700;
-            raw[12]=0x2607; raw[13]=0x2208; raw[14]=0x1500; raw[16]=0x0444; raw[17]=0x0300; raw[18]=1600; raw[19]=630; raw[20]=2;
+            Assert.Equal((ushort)768,start); Assert.Equal((ushort)20,count);
+            var raw=new ushort[20]; raw[0]=0x2607; raw[1]=0x2214; raw[2]=0x3009; raw[3]=0x0700;
+            raw[12]=0x2607; raw[13]=0x2208; raw[14]=0x1500; raw[16]=0x0444; raw[17]=0x0300; raw[18]=1600; raw[19]=4;
             return raw;
         });
-        var result=await new FaultRecordService(client,new RegisterParser()).ReadAsync(1,FaultRecordType.Fault,3,WordOrder.HighWordFirst,TimeSpan.Zero);
+        var result=await new FaultRecordService(client,new RegisterParser()).ReadAsync(
+            1,FaultRecordType.Fault,3,WordOrder.HighWordFirst,BreakerSeries.BW1,TimeSpan.Zero);
         Assert.Equal(((ushort)785,(ushort)0x0300),client.LastWrite);
         Assert.Empty(result.Errors); Assert.Equal(20,result.Values.Count);
-        Assert.DoesNotContain(result.Values,x=>x.Addresses.Contains((ushort)788));
+        Assert.Equal("630 A",result.Values.Single(x=>x.Name=="额定电流").DisplayValue);
     }
 
     [Fact]

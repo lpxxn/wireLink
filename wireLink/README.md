@@ -13,7 +13,7 @@ dotnet test tests/WireLink.Tests/WireLink.Tests.csproj
 dotnet run --project src/WireLink.App/WireLink.App.csproj
 ```
 
-操作顺序：选择或输入串口 → 选择波特率 → 打开串口 → 输入设备地址 → 连接测试 → 读取设备/故障数据。程序恢复上次设置，但不会自动打开串口。
+操作顺序：选择或输入串口 → 选择波特率 → 打开串口 → 输入设备地址并选择 BW1/BW3 控制器 → 连接测试 → 读取设备/故障数据。程序恢复上次设置，但不会自动打开串口。
 
 macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed by system policy`，请按 [发布与签名](docs/release.md) 的调试签名段处理。
 

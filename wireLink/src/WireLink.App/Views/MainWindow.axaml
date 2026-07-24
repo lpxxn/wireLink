@@ -217,12 +217,31 @@
 
             <Expander Header="高级通信设置">
               <StackPanel Spacing="9" Margin="0,12,0,2">
+                <TextBlock Classes="label" Text="控制器"/>
+                <ComboBox Classes="input"
+                          ItemsSource="{Binding ControllerOptions}"
+                          SelectedItem="{Binding ControllerName}"
+                          IsEnabled="{Binding IsSerialOpen}"
+                          HorizontalAlignment="Stretch"/>
                 <TextBlock Classes="label" Text="uint32 字序"/>
-                <ComboBox Classes="input" ItemsSource="{Binding WordOrders}" SelectedItem="{Binding WordOrder}"/>
+                <ComboBox Classes="input"
+                          ItemsSource="{Binding WordOrders}"
+                          SelectedItem="{Binding WordOrder}"
+                          HorizontalAlignment="Stretch"/>
                 <TextBlock Classes="label" Text="请求超时（ms）" Margin="0,4,0,0"/>
-                <NumericUpDown Classes="input" Value="{Binding ReadTimeoutMilliseconds}" Minimum="100" Maximum="10000" Increment="100"/>
+                <NumericUpDown Classes="input"
+                               Value="{Binding ReadTimeoutMilliseconds}"
+                               Minimum="100"
+                               Maximum="10000"
+                               Increment="100"
+                               HorizontalAlignment="Stretch"/>
                 <TextBlock Classes="label" Text="故障记录就绪等待（ms）" Margin="0,4,0,0"/>
-                <NumericUpDown Classes="input" Value="{Binding FaultDelayMilliseconds}" Minimum="0" Maximum="2000" Increment="50"/>
+                <NumericUpDown Classes="input"
+                               Value="{Binding FaultDelayMilliseconds}"
+                               Minimum="0"
+                               Maximum="2000"
+                               Increment="50"
+                               HorizontalAlignment="Stretch"/>
               </StackPanel>
             </Expander>
           </StackPanel>

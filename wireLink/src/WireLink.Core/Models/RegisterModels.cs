@@ -25,10 +25,12 @@ public enum ValueTransform
 {
     Multiply,
     CurrentRatio,
+    RatedCurrent,
     Percent,
     RunStatus,
     AlarmBits,
     CurrentEvent,
+    EventData0,
     RawUnconfirmed,
     BcdYearMonth,
     BcdDayHour,
@@ -73,7 +75,9 @@ public sealed record DecodedValue(
     string? Warning,
     DateTimeOffset ReadAt)
 {
-    public string DisplayValue => string.IsNullOrWhiteSpace(Unit) ? Value : $"{Value} {Unit}";
+    public string DisplayValue => string.IsNullOrWhiteSpace(Unit)
+        ? Value
+        : Unit == "%" ? $"{Value}%" : $"{Value} {Unit}";
 
     public string AddressText => string.Join(", ", Addresses);
 

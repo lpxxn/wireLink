@@ -8,14 +8,16 @@ namespace WireLink.Core.Services;
 public interface IDeviceDataService
 {
     Task<bool> TestConnectionAsync(byte slaveAddress, CancellationToken cancellationToken = default);
-    Task<DataReadResult> ReadAsync(byte slaveAddress, WordOrder wordOrder, CancellationToken cancellationToken = default);
+    Task<DataReadResult> ReadAsync(byte slaveAddress, WordOrder wordOrder, BreakerSeries controllerSeries,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>历史故障记录读取服务。</summary>
 public interface IFaultRecordService
 {
     Task<DataReadResult> ReadAsync(byte slaveAddress, FaultRecordType type, byte recordIndex,
-        WordOrder wordOrder, TimeSpan readyDelay, CancellationToken cancellationToken = default);
+        WordOrder wordOrder, BreakerSeries controllerSeries, TimeSpan readyDelay,
+        CancellationToken cancellationToken = default);
 }
 
 public enum AppThemeMode { System, Light, Dark }
@@ -29,7 +31,8 @@ public sealed record AppSettings(
     AppThemeMode Theme = AppThemeMode.System,
     WordOrder WordOrder = WordOrder.HighWordFirst,
     int ReadTimeoutMilliseconds = 1000,
-    int FaultReadyDelayMilliseconds = 100);
+    int FaultReadyDelayMilliseconds = 100,
+    BreakerSeries ControllerSeries = BreakerSeries.BW1);
 
 public interface ISettingsService
 {
@@ -74,14 +77,15 @@ public sealed class DeviceDataService(IModbusRtuClient client, RegisterParser pa
     }
 
     public async Task<DataReadResult> ReadAsync(byte slaveAddress, WordOrder wordOrder,
+        BreakerSeries controllerSeries,
         CancellationToken cancellationToken = default)
     {
         var samples = new Dictionary<ushort, RawRegisterSample>();
         var errors = new List<string>();
         var readAt = DateTimeOffset.Now;
 
-        // 先读取隐藏的电流变比，使随后成功的电流区间可以立即计算。
-        var blocks = RegisterCatalog.DeviceBlocks.OrderByDescending(block => block.StartAddress == 788);
+        // 先读取隐藏的额定电流序值，使随后成功的电流区间可以立即计算。
+        var blocks = RegisterCatalog.DeviceBlocks.OrderByDescending(block => block.StartAddress == 787);
         foreach (var block in blocks)
         {
             try
@@ -103,14 +107,18 @@ public sealed class DeviceDataService(IModbusRtuClient client, RegisterParser pa
             }
         }
 
-        return new DataReadResult(parser.Parse(RegisterCatalog.DeviceDefinitions, samples, wordOrder), errors, readAt);
+        return new DataReadResult(
+            parser.Parse(RegisterCatalog.DeviceDefinitions, samples, wordOrder, controllerSeries: controllerSeries),
+            errors,
+            readAt);
     }
 }
 
 public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser parser) : IFaultRecordService
 {
     public async Task<DataReadResult> ReadAsync(byte slaveAddress, FaultRecordType type, byte recordIndex,
-        WordOrder wordOrder, TimeSpan readyDelay, CancellationToken cancellationToken = default)
+        WordOrder wordOrder, BreakerSeries controllerSeries, TimeSpan readyDelay,
+        CancellationToken cancellationToken = default)
     {
         if (recordIndex > 15) throw new ArgumentOutOfRangeException(nameof(recordIndex), "记录序号必须为 0～15。");
         var selector = (ushort)((recordIndex << 8) | (byte)type);
@@ -120,13 +128,16 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
         var readAt = DateTimeOffset.Now;
         try
         {
-            var raw = await client.ReadHoldingRegistersAsync(slaveAddress, 768, 21, cancellationToken);
+            var raw = await client.ReadHoldingRegistersAsync(slaveAddress, 768, 20, cancellationToken);
             var samples = raw.Select((value, index) =>
             {
                 var address = checked((ushort)(768 + index));
                 return new RawRegisterSample(address, value, readAt);
             }).ToDictionary(sample => sample.Address);
-            return new DataReadResult(parser.Parse(RegisterCatalog.FaultDefinitions, samples, wordOrder, type), [], readAt);
+            return new DataReadResult(
+                parser.Parse(RegisterCatalog.FaultDefinitions, samples, wordOrder, type, controllerSeries),
+                [],
+                readAt);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

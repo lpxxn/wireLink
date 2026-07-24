@@ -101,10 +101,11 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         var map = new Dictionary<ushort, ushort>();
         foreach (var (start, count) in new[] { (256,3),(268,3),(336,8),(352,6),(432,2),(512,12),(768,21) })
             for (var i = 0; i < count; i++) map[(ushort)(start + i)] = 0;
-        map[256]=230; map[257]=231; map[258]=229; map[268]=21; map[269]=20; map[270]=22; map[788]=2;
+        map[256]=230; map[257]=231; map[258]=229; map[268]=21; map[269]=20; map[270]=22;
         SetUInt32(map,336,12345); SetUInt32(map,338,12410); SetUInt32(map,340,12280); SetUInt32(map,342,980);
         SetUInt32(map,352,2301); SetUInt32(map,354,2310); SetUInt32(map,356,2294); SetUInt32(map,432,7654321);
-        map[512]=0x0002; map[784]=0x0444; map[786]=1600; map[787]=630;
+        // 暂按实机返回“额定电流序值”模拟：BW1/BW3 的序值 4 都对应 630A，变比为 1。
+        map[512]=0x0002; map[784]=0x0444; map[786]=1600; map[787]=4;
         return map;
     }
 
@@ -119,7 +120,7 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
             record[0]=0x2607; record[1]=0x2214; record[2]=(ushort)(0x3000 | secondBcd); record[3]=(ushort)(((type == 1 ? 3 : 7) << 8) | index % 4);
             for (var i=4;i<=11;i++) record[i]=(ushort)(1000 + index * 10 + i);
             record[12]=0x2607; record[13]=0x2208; record[14]=0x1500; record[15]=0x0100; record[16]=0x0444;
-            record[17]=(ushort)((index<<8)|type); record[18]=1600; record[19]=630; record[20]=2;
+            record[17]=(ushort)((index<<8)|type); record[18]=1600; record[19]=4; record[20]=0;
             result[(type,index)] = record;
         }
         return result;
