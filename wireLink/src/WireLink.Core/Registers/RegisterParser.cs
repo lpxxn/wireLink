@@ -358,7 +358,7 @@ public sealed class RegisterParser
         if (second > 59) throw new FormatException($"无效秒 {second}");
 
         return (
-            $"{year:0000}年 {month:00}月，{day:00}日 {hour:00}时，{minute:00}分 {second:00}秒",
+            $"{year:0000}-{month:00}-{day:00} {hour:00}:{minute:00}:{second:00}",
             "768～770/780～782 按 BCD 组合时间",
             ParseStatus.Success,
             null);

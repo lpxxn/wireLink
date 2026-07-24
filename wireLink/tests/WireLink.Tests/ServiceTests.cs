@@ -37,7 +37,7 @@ public sealed class ServiceTests
             1,FaultRecordType.Fault,3,WordOrder.HighWordFirst,BreakerSeries.BW1,TimeSpan.Zero);
         Assert.Equal(((ushort)785,(ushort)0x0300),client.LastWrite);
         Assert.Empty(result.Errors); Assert.Equal(16,result.Values.Count);
-        Assert.Equal("2026年 07月，22日 14时，30分 09秒",
+        Assert.Equal("2026-07-22 14:30:09",
             result.Values.Single(x=>x.Name=="故障记录时间").Value);
         Assert.Equal("630 A",result.Values.Single(x=>x.Name=="额定电流").DisplayValue);
     }

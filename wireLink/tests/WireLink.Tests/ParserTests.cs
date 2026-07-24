@@ -323,7 +323,7 @@ public sealed class ParserTests
                 {770,Sample(770,0x3000)},
             },
             WordOrder.HighWordFirst).Single();
-        Assert.Equal("2026年 07月，22日 14时，30分 00秒",value.Value);
+        Assert.Equal("2026-07-22 14:30:00",value.Value);
         Assert.Equal(ParseStatus.Success,value.Status);
         Assert.Null(value.Warning);
     }
