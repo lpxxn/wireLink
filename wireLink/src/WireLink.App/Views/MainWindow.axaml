@@ -9,7 +9,8 @@
         MinHeight="600"
         ShowInTaskbar="True"
         WindowStartupLocation="CenterScreen"
-        Title="WireLink · RS485 设备通信工具">
+        Icon="/Assets/wirelink-icon.png"
+        Title="Bevone · WireLink">
 
   <Window.Styles>
     <Style Selector="Border.panel">

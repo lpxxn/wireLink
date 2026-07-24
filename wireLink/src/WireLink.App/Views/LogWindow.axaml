@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:WireLink.App.ViewModels" x:Class="WireLink.App.Views.LogWindow"
         x:DataType="vm:LogViewModel" Width="1000" Height="620" MinWidth="720" MinHeight="420"
+        Icon="/Assets/wirelink-icon.png"
         Title="WireLink 诊断日志">
   <Grid RowDefinitions="Auto,*" Margin="16">
     <Grid ColumnDefinitions="160,220,Auto,Auto,Auto,Auto,*,Auto" ColumnSpacing="10">
