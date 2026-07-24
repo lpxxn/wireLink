@@ -181,6 +181,38 @@ public sealed class ParserTests
     }
 
     [Fact]
+    public void Current_fault_data_three_displays_decimal_raw_value()
+    {
+        var definition=RegisterCatalog.DeviceDefinitions.Single(x=>x.Addresses.Contains((ushort)519));
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>
+            {
+                {512,Sample(512,1<<3)},
+                {519,Sample(519,0x1234)},
+            },
+            WordOrder.HighWordFirst).Single();
+        Assert.Equal("4660",value.Value);
+        Assert.Equal("故障数据 3 原始值直接显示",value.Formula);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.Null(value.Warning);
+    }
+
+    [Fact]
+    public void Historical_fault_data_three_displays_decimal_raw_value()
+    {
+        var definition=RegisterCatalog.FaultDefinitions.Single(x=>x.Addresses.Contains((ushort)775));
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>{{775,Sample(775,1234)}},
+            WordOrder.HighWordFirst,
+            FaultRecordType.Fault).Single();
+        Assert.Equal("1234",value.Value);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.Null(value.Warning);
+    }
+
+    [Fact]
     public void State_change_record_uses_same_event_register_area_without_structure_warning()
     {
         var definitions=RegisterCatalog.FaultDefinitions

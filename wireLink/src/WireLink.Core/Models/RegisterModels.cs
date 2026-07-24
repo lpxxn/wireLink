@@ -32,6 +32,7 @@ public enum ValueTransform
     CurrentEvent,
     EventData0,
     EventAdditionalData,
+    EventData3Raw,
     RawUnconfirmed,
     BcdYearMonth,
     BcdDayHour,

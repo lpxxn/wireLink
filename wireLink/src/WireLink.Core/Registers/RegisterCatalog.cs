@@ -43,7 +43,7 @@ public static class RegisterCatalog
         new("当前故障数据 0", [516], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData0, FormatDescription: "见 5.5；按事件类型解析"),
         EventAdditional("当前故障数据 1", 517),
         EventAdditional("当前故障数据 2", 518),
-        EventAdditional("当前故障数据 3", 519),
+        EventData3("当前故障数据 3", 519),
         EventAdditional("当前故障数据 4", 520),
         EventAdditional("当前故障数据 5", 521),
         EventAdditional("当前故障数据 6", 522),
@@ -59,7 +59,7 @@ public static class RegisterCatalog
         new("故障数据 0", [772], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData0, FormatDescription: "见 5.5；按事件类型解析"),
         EventAdditional("故障数据 1", 773),
         EventAdditional("故障数据 2", 774),
-        EventAdditional("故障数据 3", 775),
+        EventData3("故障数据 3", 775),
         EventAdditional("故障数据 4", 776),
         EventAdditional("故障数据 5", 777),
         EventAdditional("故障数据 6", 778),
@@ -84,6 +84,10 @@ public static class RegisterCatalog
     private static RegisterDefinition EventAdditional(string name, ushort address) =>
         new(name, [address], RegisterDataType.UInt16, string.Empty, ValueTransform.EventAdditionalData,
             FormatDescription: "故障按 5.5；报警时为空");
+
+    private static RegisterDefinition EventData3(string name, ushort address) =>
+        new(name, [address], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData3Raw,
+            FormatDescription: "故障直接显示原始值；报警时为空");
 
     private static RegisterDefinition UInt32(
         string name,

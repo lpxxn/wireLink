@@ -92,6 +92,7 @@ public sealed class RegisterParser
                 ValueTransform.CurrentEvent => DecodeEvent((ushort)numeric, allSamples, recordType),
                 ValueTransform.EventData0 => DecodeEventData0((ushort)numeric, allSamples, recordType, controllerSeries),
                 ValueTransform.EventAdditionalData => DecodeAdditionalEventData(numeric, allSamples, recordType),
+                ValueTransform.EventData3Raw => DecodeEventData3Raw(numeric, allSamples, recordType),
                 ValueTransform.RawUnconfirmed => ($"0x{numeric:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "事件特定解析尚未完成或协议待确认"),
                 ValueTransform.BcdYearMonth => DecodeBcdPair((ushort)numeric, "年", "月", 2000),
                 ValueTransform.BcdDayHour => DecodeBcdPair((ushort)numeric, "日", "时", 0),
@@ -225,6 +226,27 @@ public sealed class RegisterParser
         return effectiveType == FaultRecordType.Alarm
             ? (string.Empty, "报警仅数据 0 有效，本字段为空", ParseStatus.Success, null)
             : ($"0x{raw:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "事件特定解析尚未完成或协议待确认");
+    }
+
+    /// <summary>
+    /// 故障数据 3 暂不关联保护设置，直接显示寄存器十进制原始值；
+    /// 报警事件仍遵循只有数据 0 有效的规则。
+    /// </summary>
+    private static (string, string, ParseStatus, string?) DecodeEventData3Raw(
+        uint raw,
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        FaultRecordType? recordType)
+    {
+        var effectiveType = ResolveEventType(samples, recordType);
+        return effectiveType switch
+        {
+            FaultRecordType.Alarm =>
+                (string.Empty, "报警仅数据 0 有效，本字段为空", ParseStatus.Success, null),
+            FaultRecordType.Fault =>
+                (raw.ToString(CultureInfo.InvariantCulture), "故障数据 3 原始值直接显示", ParseStatus.Success, null),
+            _ =>
+                ($"0x{raw:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "事件特定解析尚未完成或协议待确认"),
+        };
     }
 
     /// <summary>
