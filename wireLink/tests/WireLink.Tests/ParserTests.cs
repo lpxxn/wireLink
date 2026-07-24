@@ -298,8 +298,34 @@ public sealed class ParserTests
     public void Invalid_bcd_is_local_parse_warning()
     {
         var definition=RegisterCatalog.FaultDefinitions[0];
-        var value=new RegisterParser().Parse([definition],new Dictionary<ushort,RawRegisterSample>{{768,Sample(768,0x2A13)}},WordOrder.HighWordFirst).Single();
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>
+            {
+                {768,Sample(768,0x2A13)},
+                {769,Sample(769,0x2214)},
+                {770,Sample(770,0x3000)},
+            },
+            WordOrder.HighWordFirst).Single();
         Assert.Equal(ParseStatus.InvalidData,value.Status);
+    }
+
+    [Fact]
+    public void Fault_time_combines_three_bcd_registers()
+    {
+        var definition=RegisterCatalog.FaultDefinitions.Single(x=>x.Name=="故障记录时间");
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>
+            {
+                {768,Sample(768,0x2607)},
+                {769,Sample(769,0x2214)},
+                {770,Sample(770,0x3000)},
+            },
+            WordOrder.HighWordFirst).Single();
+        Assert.Equal("2026年 07月，22日 14时，30分 00秒",value.Value);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.Null(value.Warning);
     }
 
     [Fact]

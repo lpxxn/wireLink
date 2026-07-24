@@ -94,6 +94,7 @@ public sealed class RegisterParser
                 ValueTransform.EventAdditionalData => DecodeAdditionalEventData(numeric, allSamples, recordType),
                 ValueTransform.EventData3Raw => DecodeEventData3Raw(numeric, allSamples, recordType),
                 ValueTransform.RawUnconfirmed => ($"0x{numeric:X}", "未计算", ParseStatus.ProtocolUnconfirmed, "事件特定解析尚未完成或协议待确认"),
+                ValueTransform.BcdDateTime => DecodeBcdDateTime(raw),
                 ValueTransform.BcdYearMonth => DecodeBcdPair((ushort)numeric, "年", "月", 2000),
                 ValueTransform.BcdDayHour => DecodeBcdPair((ushort)numeric, "日", "时", 0),
                 ValueTransform.BcdMinuteSecond => DecodeBcdPair((ushort)numeric, "分", "秒", 0),
@@ -335,6 +336,32 @@ public sealed class RegisterParser
         var high = DecodeBcd((byte)(value >> 8)) + highOffset;
         var low = DecodeBcd((byte)value);
         return ($"{highLabel} {high:00} / {lowLabel} {low:00}", "高/低字节分别按 BCD 解码", ParseStatus.Success, null);
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeBcdDateTime(
+        IReadOnlyList<RawRegisterSample> samples)
+    {
+        if (samples.Count != 3)
+            throw new FormatException("完整时间必须包含年月、日时、分秒三个寄存器。");
+
+        var year = 2000 + DecodeBcd((byte)(samples[0].Value >> 8));
+        var month = DecodeBcd((byte)samples[0].Value);
+        var day = DecodeBcd((byte)(samples[1].Value >> 8));
+        var hour = DecodeBcd((byte)samples[1].Value);
+        var minute = DecodeBcd((byte)(samples[2].Value >> 8));
+        var second = DecodeBcd((byte)samples[2].Value);
+
+        if (month is < 1 or > 12) throw new FormatException($"无效月份 {month}");
+        if (day is < 1 or > 31) throw new FormatException($"无效日期 {day}");
+        if (hour > 23) throw new FormatException($"无效小时 {hour}");
+        if (minute > 59) throw new FormatException($"无效分钟 {minute}");
+        if (second > 59) throw new FormatException($"无效秒 {second}");
+
+        return (
+            $"{year:0000}年 {month:00}月，{day:00}日 {hour:00}时，{minute:00}分 {second:00}秒",
+            "768～770/780～782 按 BCD 组合时间",
+            ParseStatus.Success,
+            null);
     }
 
     private static int DecodeBcd(byte value)

@@ -34,6 +34,7 @@ public enum ValueTransform
     EventAdditionalData,
     EventData3Raw,
     RawUnconfirmed,
+    BcdDateTime,
     BcdYearMonth,
     BcdDayHour,
     BcdMinuteSecond,

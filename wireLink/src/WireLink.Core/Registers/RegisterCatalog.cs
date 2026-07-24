@@ -55,9 +55,8 @@ public static class RegisterCatalog
 
     public static IReadOnlyList<RegisterDefinition> FaultDefinitions { get; } =
     [
-        new("故障记录年月", [768], RegisterDataType.UInt16, string.Empty, ValueTransform.BcdYearMonth, FormatDescription: "BCD：L月/H年"),
-        new("故障记录日时", [769], RegisterDataType.UInt16, string.Empty, ValueTransform.BcdDayHour, FormatDescription: "BCD：L时/H日"),
-        new("故障记录分秒", [770], RegisterDataType.UInt16, string.Empty, ValueTransform.BcdMinuteSecond, FormatDescription: "BCD：L秒/H分"),
+        new("故障记录时间", [768, 769, 770], RegisterDataType.UInt16, string.Empty,
+            ValueTransform.BcdDateTime, FormatDescription: "BCD：年月日时分秒"),
         new("故障记录相别和类型", [771], RegisterDataType.UInt16, string.Empty, ValueTransform.CurrentEvent, FormatDescription: "见 5.4"),
         new("故障数据 0", [772], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData0, FormatDescription: "见 5.5；按事件类型解析"),
         EventAdditional("故障数据 1", 773),
@@ -67,9 +66,8 @@ public static class RegisterCatalog
         EventAdditional("故障数据 5", 777),
         EventAdditional("故障数据 6", 778),
         EventAdditional("故障数据 7", 779),
-        new("本次上电年月", [780], RegisterDataType.UInt16, string.Empty, ValueTransform.BcdYearMonth, FormatDescription: "BCD：L月/H年"),
-        new("本次上电日时", [781], RegisterDataType.UInt16, string.Empty, ValueTransform.BcdDayHour, FormatDescription: "BCD：L时/H日"),
-        new("本次上电分秒", [782], RegisterDataType.UInt16, string.Empty, ValueTransform.BcdMinuteSecond, FormatDescription: "BCD：L秒/H分"),
+        new("本次上电时间", [780, 781, 782], RegisterDataType.UInt16, string.Empty,
+            ValueTransform.BcdDateTime, FormatDescription: "BCD：年月日时分秒"),
         new("软件版本号", [783], RegisterDataType.UInt16, string.Empty, ValueTransform.Multiply, FormatDescription: "协议标注未使用"),
         new("故障记录状态标志", [784], RegisterDataType.UInt16, string.Empty, ValueTransform.FaultRecordStatus, FormatDescription: "见 5.6"),
         new("指定读取的记录", [785], RegisterDataType.UInt16, string.Empty, ValueTransform.RecordSelector, FormatDescription: "L类型/H序号"),
