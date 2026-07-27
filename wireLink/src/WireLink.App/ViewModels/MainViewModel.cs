@@ -190,9 +190,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             var result=await _faultService.ReadAsync((byte)address,FaultRecordType.Fault,0,
                 WordOrder.HighWordFirst,SelectedControllerSeries,
                 TimeSpan.FromMilliseconds(FaultDelayMilliseconds),token);
-            if(result.Errors.Count>0) throw new ModbusProtocolException(result.Errors[0]);
-            Merge(FaultRows,result.Values,null); _faultReadAt=result.ReadAt;
-            Notice="故障记录 0 已读取";
+            if(!result.HasData)
+                throw new ModbusProtocolException(result.Errors.FirstOrDefault() ?? "没有读取到故障数据");
+
+            Merge(
+                FaultRows,
+                result.Values,
+                result.Errors.Count>0 ? "本字段读取失败，显示上次成功值" : null);
+            _faultReadAt=result.ReadAt;
+            Notice=result.Errors.Count==0
+                ? "故障记录 0 已读取"
+                : $"故障数据部分读取失败：{result.Errors[0]}";
         },"读取故障记录失败");
     }
 

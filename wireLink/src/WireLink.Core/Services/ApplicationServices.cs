@@ -126,26 +126,39 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
         if (readyDelay > TimeSpan.Zero) await Task.Delay(readyDelay, cancellationToken);
 
         var readAt = DateTimeOffset.Now;
+        var samples = new Dictionary<ushort, RawRegisterSample>();
+        var errors = new List<string>();
+
         try
         {
             var raw = await client.ReadHoldingRegistersAsync(slaveAddress, 768, 20, cancellationToken);
-            var samples = raw.Select((value, index) =>
+            foreach (var (value, index) in raw.Select((value, index) => (value, index)))
             {
                 var address = checked((ushort)(768 + index));
-                return new RawRegisterSample(address, value, readAt);
-            }).ToDictionary(sample => sample.Address);
-            var operationCount = await client.ReadHoldingRegistersAsync(
-                slaveAddress, 1031, 1, cancellationToken);
-            samples[1031] = new RawRegisterSample(1031, operationCount[0], DateTimeOffset.Now);
-            return new DataReadResult(
-                parser.Parse(RegisterCatalog.FaultDefinitions, samples, wordOrder, type, controllerSeries),
-                [],
-                readAt);
+                samples[address] = new RawRegisterSample(address, value, readAt);
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            return new DataReadResult([], [$"读取故障记录失败：{ex.Message}"], readAt);
+            errors.Add($"读取故障记录 768～787 失败：{ex.Message}");
         }
+
+        try
+        {
+            var operationCount = await client.ReadHoldingRegistersAsync(
+                slaveAddress, 1031, 1, cancellationToken);
+            samples[1031] = new RawRegisterSample(1031, operationCount[0], DateTimeOffset.Now);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            errors.Add($"读取总操作次数 1031 失败：{ex.Message}");
+        }
+
+        return new DataReadResult(
+            parser.Parse(RegisterCatalog.FaultDefinitions, samples, wordOrder, type, controllerSeries),
+            errors,
+            readAt);
     }
 }
