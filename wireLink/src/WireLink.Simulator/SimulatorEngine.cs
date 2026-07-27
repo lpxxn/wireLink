@@ -106,7 +106,7 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         SetUInt32(map,336,12345); SetUInt32(map,338,12410); SetUInt32(map,340,12280); SetUInt32(map,342,980);
         SetUInt32(map,352,2301); SetUInt32(map,354,2310); SetUInt32(map,356,2294); SetUInt32(map,432,7654321);
         // 暂按实机返回“额定电流序值”模拟：BW1/BW3 的序值 4 都对应 630A，变比为 1。
-        map[512]=0x0002; map[784]=0x0444; map[786]=1600; map[787]=4;
+        map[512]=0x0002; map[784]=0x0444; map[786]=1600; map[787]=4; map[1031]=128;
         return map;
     }
 

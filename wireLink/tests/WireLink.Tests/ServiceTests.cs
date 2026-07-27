@@ -28,6 +28,11 @@ public sealed class ServiceTests
     {
         await using var client=new FakeClient((start,count)=>
         {
+            if(start==1031)
+            {
+                Assert.Equal((ushort)1,count);
+                return [128];
+            }
             Assert.Equal((ushort)768,start); Assert.Equal((ushort)20,count);
             var raw=new ushort[20]; raw[0]=0x2607; raw[1]=0x2214; raw[2]=0x3009; raw[3]=0x0700;
             raw[12]=0x2607; raw[13]=0x2208; raw[14]=0x1500; raw[16]=0x0444; raw[17]=0x0300; raw[18]=1600; raw[19]=4;
@@ -36,10 +41,11 @@ public sealed class ServiceTests
         var result=await new FaultRecordService(client,new RegisterParser()).ReadAsync(
             1,FaultRecordType.Fault,3,WordOrder.HighWordFirst,BreakerSeries.BW1,TimeSpan.Zero);
         Assert.Equal(((ushort)785,(ushort)0x0300),client.LastWrite);
-        Assert.Empty(result.Errors); Assert.Equal(16,result.Values.Count);
+        Assert.Empty(result.Errors); Assert.Equal(17,result.Values.Count);
         Assert.Equal("2026-07-22 14:30:09",
             result.Values.Single(x=>x.Name=="故障记录时间").Value);
         Assert.Equal("630 A",result.Values.Single(x=>x.Name=="额定电流").DisplayValue);
+        Assert.Equal("128",result.Values.Single(x=>x.Name=="总操作次数").Value);
     }
 
     [Fact]

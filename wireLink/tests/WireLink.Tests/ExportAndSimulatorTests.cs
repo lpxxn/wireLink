@@ -45,6 +45,8 @@ public sealed class ExportAndSimulatorTests
         Assert.True(Crc16Modbus.IsValid(response)); Assert.Equal(230,(response[3]<<8)|response[4]);
         var thermalResponse=engine.Process(Crc16Modbus.Append([1,3,1,23,0,1]))!;
         Assert.Equal(68,(thermalResponse[3]<<8)|thermalResponse[4]);
+        var operationResponse=engine.Process(Crc16Modbus.Append([1,3,4,7,0,1]))!;
+        Assert.Equal(128,(operationResponse[3]<<8)|operationResponse[4]);
         var ordinalResponse=engine.Process(Crc16Modbus.Append([1,3,3,19,0,1]))!;
         Assert.Equal(4,(ordinalResponse[3]<<8)|ordinalResponse[4]);
         var write=Crc16Modbus.Append([1,6,3,17,2,1]);

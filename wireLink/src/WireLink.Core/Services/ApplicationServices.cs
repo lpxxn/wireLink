@@ -134,6 +134,9 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
                 var address = checked((ushort)(768 + index));
                 return new RawRegisterSample(address, value, readAt);
             }).ToDictionary(sample => sample.Address);
+            var operationCount = await client.ReadHoldingRegistersAsync(
+                slaveAddress, 1031, 1, cancellationToken);
+            samples[1031] = new RawRegisterSample(1031, operationCount[0], DateTimeOffset.Now);
             return new DataReadResult(
                 parser.Parse(RegisterCatalog.FaultDefinitions, samples, wordOrder, type, controllerSeries),
                 [],

@@ -74,6 +74,7 @@ public static class RegisterCatalog
         Number("框架等级", 786, "A"),
         new("额定电流", [787], RegisterDataType.UInt16, "A", ValueTransform.RatedCurrent,
             FormatDescription: "按控制器系列和额定电流序值映射"),
+        Number("总操作次数", 1031, string.Empty),
     ];
 
     private static RegisterDefinition Number(string name, ushort address, string unit, decimal multiplier = 1m) =>
