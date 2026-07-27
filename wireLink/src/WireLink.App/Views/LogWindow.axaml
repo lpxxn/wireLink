@@ -7,7 +7,7 @@
     <Grid ColumnDefinitions="160,220,Auto,Auto,Auto,Auto,*,Auto" ColumnSpacing="10">
       <ComboBox ItemsSource="{Binding Levels}" SelectedItem="{Binding Minimum}" />
       <TextBox Grid.Column="1" Text="{Binding Keyword}" PlaceholderText="按关键字过滤" />
-      <CheckBox Grid.Column="2" IsChecked="{Binding Paused}" Content="暂停滚动" VerticalAlignment="Center" />
+      <!-- <CheckBox Grid.Column="2" IsChecked="{Binding Paused}" Content="暂停滚动" VerticalAlignment="Center" /> -->
       <Button Grid.Column="3" Command="{Binding RefreshCommand}" Content="刷新显示" />
       <Button Grid.Column="4" Click="OnCopyClick" Content="复制所选" />
       <Button Grid.Column="5" Click="OnOpenDirectoryClick" Content="打开目录" />
