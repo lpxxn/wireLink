@@ -31,6 +31,7 @@ Core 不依赖 Avalonia、串口、Excel 或日志实现。App 只编排服务�
 - 配置：系统 ApplicationData 下 `WireLink/settings.json`。
 - 日志：系统 LocalApplicationData 下 `WireLink/logs/wirelink-*.log`。
 - 配置只保存用户选项，不保存串口或设备已连接状态。
+- 所有寄存器相关日志必须包含十进制和十六进制地址。TX/RX、重试和通讯失败记录请求地址范围；字段解析记录字段名、地址、原始值、公式和结果；缺失地址记录期望地址与实际缺失地址；解析失败使用 Error 级别并附带异常堆栈。
 
 ## 注释和变更纪律
 

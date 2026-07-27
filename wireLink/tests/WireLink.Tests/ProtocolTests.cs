@@ -17,14 +17,17 @@ public sealed class ProtocolTests
     [Fact]
     public async Task Client_accepts_fragmented_response_and_big_endian_registers()
     {
+        var trace=new RecordingProtocolTrace();
         await using var transport=new ScriptedTransport(request =>
         {
             var payload=new byte[]{request[0],0x03,0x04,0x12,0x34,0xAB,0xCD};
             return Crc16Modbus.Append(payload);
         },chunkSize:1);
-        await using var client=new ModbusRtuClient(transport);
+        await using var client=new ModbusRtuClient(transport,trace);
         await client.OpenAsync(new("test",9600,TimeSpan.FromSeconds(1),TimeSpan.FromSeconds(1)));
         Assert.Equal([0x1234,0xABCD],await client.ReadHoldingRegistersAsync(1,256,2));
+        Assert.Contains(trace.DebugMessages,
+            message=>message.Contains("寄存器地址=256～257(0x0100～0x0101)"));
     }
 
     [Fact]
@@ -47,12 +50,16 @@ public sealed class ProtocolTests
     [Fact]
     public async Task Device_exception_is_not_retried()
     {
+        var trace=new RecordingProtocolTrace();
         var calls=0;
         await using var transport=new ScriptedTransport(request=> { calls++; return Crc16Modbus.Append([request[0],0x83,0x02]); });
-        await using var client=new ModbusRtuClient(transport);
+        await using var client=new ModbusRtuClient(transport,trace);
         await client.OpenAsync(new("test",9600,TimeSpan.FromSeconds(1),TimeSpan.FromSeconds(1)));
         var error=await Assert.ThrowsAsync<ModbusDeviceException>(()=>client.ReadHoldingRegistersAsync(1,1,1));
         Assert.Equal((byte)2,error.ExceptionCode); Assert.Equal(1,calls);
+        var log=Assert.Single(trace.ErrorMessages);
+        Assert.Contains("寄存器地址=1(0x0001)",log.Message);
+        Assert.Same(error,log.Exception);
     }
 
     private sealed class ScriptedTransport(Func<byte[],byte[]> responder,int chunkSize=int.MaxValue) : IByteTransport

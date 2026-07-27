@@ -60,6 +60,10 @@ public sealed class RegisterParser
 
             if (raw.Length != definition.Addresses.Count)
             {
+                var missing = definition.Addresses.Where(address => !samples.ContainsKey(address));
+                _trace.Warning(
+                    $"跳过解析；字段={definition.Name}；寄存器地址={FormatAddresses(definition.Addresses)}；"
+                    + $"缺失地址={FormatAddresses(missing)}");
                 continue;
             }
 
@@ -121,12 +125,35 @@ public sealed class RegisterParser
                 warning,
                 timestamp);
 
-            _trace.Debug($"解析 {decoded.Name}：原始={decoded.RawText}；公式={decoded.Formula}；结果={decoded.DisplayValue}；状态={decoded.Status}");
+            var logMessage =
+                $"解析字段={decoded.Name}；寄存器地址={FormatAddresses(decoded.Addresses)}；"
+                + $"原始值={decoded.RawText}；公式={decoded.Formula}；结果={decoded.DisplayValue}；"
+                + $"状态={decoded.Status}"
+                + (string.IsNullOrWhiteSpace(decoded.Warning) ? string.Empty : $"；提示={decoded.Warning}");
+            switch (decoded.Status)
+            {
+                case ParseStatus.Success:
+                    _trace.Debug(logMessage);
+                    break;
+                case ParseStatus.InvalidData:
+                case ParseStatus.ReadFailed:
+                    _trace.Error(logMessage);
+                    break;
+                default:
+                    _trace.Warning(logMessage);
+                    break;
+            }
             return decoded;
         }
         catch (Exception ex)
         {
-            _trace.Warning($"解析 {definition.Name} 失败：{ex.Message}");
+            var rawText = string.Join(
+                " / ",
+                raw.Select(sample => $"{sample.Address}(0x{sample.Address:X4})={sample.HexValue}"));
+            _trace.Error(
+                $"解析失败；字段={definition.Name}；寄存器地址={FormatAddresses(definition.Addresses)}；"
+                + $"原始值={rawText}；原因={ex.Message}",
+                ex);
             return new DecodedValue(
                 definition.Name,
                 definition.Addresses,
@@ -139,6 +166,9 @@ public sealed class RegisterParser
                 timestamp);
         }
     }
+
+    private static string FormatAddresses(IEnumerable<ushort> addresses) =>
+        string.Join(", ", addresses.Select(address => $"{address}(0x{address:X4})"));
 
     private static uint Combine(RawRegisterSample[] raw, RegisterDataType type, WordOrder wordOrder)
     {

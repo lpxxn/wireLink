@@ -297,8 +297,9 @@ public sealed class ParserTests
     [Fact]
     public void Invalid_bcd_is_local_parse_warning()
     {
+        var trace=new RecordingProtocolTrace();
         var definition=RegisterCatalog.FaultDefinitions[0];
-        var value=new RegisterParser().Parse(
+        var value=new RegisterParser(trace).Parse(
             [definition],
             new Dictionary<ushort,RawRegisterSample>
             {
@@ -308,6 +309,28 @@ public sealed class ParserTests
             },
             WordOrder.HighWordFirst).Single();
         Assert.Equal(ParseStatus.InvalidData,value.Status);
+        var error=Assert.Single(trace.ErrorMessages);
+        Assert.Contains("寄存器地址=768(0x0300), 769(0x0301), 770(0x0302)",error.Message);
+        Assert.Contains("768(0x0300)=0x2A13",error.Message);
+        Assert.NotNull(error.Exception);
+    }
+
+    [Fact]
+    public void Missing_register_is_logged_with_expected_and_missing_addresses()
+    {
+        var trace=new RecordingProtocolTrace();
+        var definition=RegisterCatalog.DeviceDefinitions.Single(x=>x.Name=="高精度电流测量 Ia");
+
+        var values=new RegisterParser(trace).Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>{{336,Sample(336,1)}},
+            WordOrder.HighWordFirst);
+
+        Assert.Empty(values);
+        var warning=Assert.Single(trace.WarningMessages);
+        Assert.Contains("字段=高精度电流测量 Ia",warning);
+        Assert.Contains("寄存器地址=336(0x0150), 337(0x0151)",warning);
+        Assert.Contains("缺失地址=337(0x0151)",warning);
     }
 
     [Fact]

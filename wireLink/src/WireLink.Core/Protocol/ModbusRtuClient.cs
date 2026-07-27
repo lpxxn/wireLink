@@ -96,6 +96,7 @@ public sealed class ModbusRtuClient : IModbusRtuClient
         }
 
         await _requestLock.WaitAsync(cancellationToken);
+        var requestContext = DescribeRequest(request);
         try
         {
             Exception? lastError = null;
@@ -105,25 +106,66 @@ public sealed class ModbusRtuClient : IModbusRtuClient
                 {
                     await EnforceSilentIntervalAsync(_options.BaudRate, cancellationToken);
                     await _transport.DiscardInputAsync(cancellationToken);
-                    _trace.Debug($"TX[{attempt}] {Convert.ToHexString(request)}");
+                    _trace.Debug($"TX[{attempt}]；{requestContext}；帧={Convert.ToHexString(request)}");
                     await _transport.WriteAsync(request, cancellationToken);
                     var response = await ReadResponseAsync(_options.ReadTimeout, cancellationToken);
-                    _trace.Debug($"RX[{attempt}] {Convert.ToHexString(response)}");
-                    return parser(response);
+                    _trace.Debug($"RX[{attempt}]；{requestContext}；帧={Convert.ToHexString(response)}");
+                    var result = parser(response);
+                    _trace.Debug($"Modbus 请求成功；{requestContext}；尝试次数={attempt}");
+                    return result;
                 }
                 catch (Exception ex) when (attempt == 1 && ex is TimeoutException or ModbusCrcException)
                 {
                     lastError = ex;
-                    _trace.Warning($"请求第 1 次失败，将重试：{ex.Message}");
+                    _trace.Warning($"Modbus 请求第 1 次失败，将重试；{requestContext}；原因={ex.Message}");
+                }
+                catch (OperationCanceledException)
+                {
+                    _trace.Information($"Modbus 请求已取消；{requestContext}");
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _trace.Error($"Modbus 请求失败；{requestContext}；尝试次数={attempt}；原因={ex.Message}", ex);
+                    throw;
                 }
             }
 
-            throw lastError ?? new ModbusProtocolException("Modbus 请求失败。");
+            var finalError = lastError ?? new ModbusProtocolException("Modbus 请求失败。");
+            _trace.Error($"Modbus 请求失败；{requestContext}；重试后仍失败；原因={finalError.Message}", finalError);
+            throw finalError;
         }
         finally
         {
             _requestLock.Release();
         }
+    }
+
+    private static string DescribeRequest(ReadOnlySpan<byte> request)
+    {
+        if (request.Length < 6)
+            return "寄存器地址=未知";
+
+        var function = request[1];
+        var startAddress = BinaryPrimitives.ReadUInt16BigEndian(request[2..4]);
+        var addressText = $"{startAddress}(0x{startAddress:X4})";
+        if (function == 0x03)
+        {
+            var count = BinaryPrimitives.ReadUInt16BigEndian(request[4..6]);
+            var endAddress = checked((ushort)(startAddress + count - 1));
+            return count == 1
+                ? $"功能=03H；寄存器地址={addressText}；数量=1"
+                : $"功能=03H；寄存器地址={startAddress}～{endAddress}"
+                  + $"(0x{startAddress:X4}～0x{endAddress:X4})；数量={count}";
+        }
+
+        if (function == 0x06)
+        {
+            var value = BinaryPrimitives.ReadUInt16BigEndian(request[4..6]);
+            return $"功能=06H；寄存器地址={addressText}；写入值={value}(0x{value:X4})";
+        }
+
+        return $"功能={function:X2}H；寄存器地址={addressText}";
     }
 
     private async Task<byte[]> ReadResponseAsync(TimeSpan timeout, CancellationToken cancellationToken)
