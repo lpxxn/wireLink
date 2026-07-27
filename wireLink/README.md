@@ -35,3 +35,13 @@ macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed b
 - [发布、签名与串口权限](docs/release.md)
 
 根目录 [README.md](../README.md) 是原始需求和“待补充协议规则”的权威清单；协议确认后应同时修改该清单、寄存器目录、解析器和测试。
+
+
+## 第一次运行慢
+第一次运行时 Windows 往往会做这些事情：
+Microsoft Defender/其他杀毒软件扫描整个 EXE。
+Windows 检查文件签名、来源和安全信誉。
+.NET 首次加载运行库、Avalonia、字体以及图形组件。
+程序文件第一次从磁盘读入内存。
+SkiaSharp 可能初始化图形和字体缓存。
+第二次启动时，文件和运行库已经进入 Windows 文件缓存，安全扫描也可能复用结果，所以会快很多。

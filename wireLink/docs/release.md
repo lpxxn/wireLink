@@ -23,6 +23,17 @@ dotnet publish src/WireLink.App -c Release -r win-x64 --self-contained true -p:P
 dotnet publish src/WireLink.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -o publish/app-win-x64
 
 
+dotnet publish src/WireLink.App `
+  -c Release `
+  -r win-x64 `
+  --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:PublishReadyToRun=true `
+  -p:DebugType=None `
+  -p:DebugSymbols=false `
+  -p:CopyDebugSymbolFilesFromPackages=false `
+  -o publish/app-win-x64
+
 
 ```
 
