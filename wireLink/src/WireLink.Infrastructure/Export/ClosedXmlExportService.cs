@@ -21,7 +21,7 @@ public sealed class ClosedXmlExportService : IExcelExportService
         if (context.RecordType is not null)
         {
             sheet.Cell(row, 3).Value = "记录";
-            sheet.Cell(row, 4).Value = $"{context.RecordType} / 记录 {context.RecordIndex}";
+            sheet.Cell(row, 4).Value = $"{context.RecordType} / 第 {context.RecordIndex} 条记录";
         }
         row += 2;
         foreach (var (column, value) in new[] { (1, "名称"), (2, "计算值"), (3, "名称"), (4, "计算值") })

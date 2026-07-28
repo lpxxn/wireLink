@@ -120,7 +120,7 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
         WordOrder wordOrder, BreakerSeries controllerSeries, TimeSpan readyDelay,
         CancellationToken cancellationToken = default)
     {
-        if (recordIndex > 15) throw new ArgumentOutOfRangeException(nameof(recordIndex), "记录序号必须为 0～15。");
+        if (recordIndex > 15) throw new ArgumentOutOfRangeException(nameof(recordIndex), "第几条记录必须为 0～15。");
         var selector = (ushort)((recordIndex << 8) | (byte)type);
         await client.WriteSingleRegisterAsync(slaveAddress, 785, selector, cancellationToken);
         if (readyDelay > TimeSpan.Zero) await Task.Delay(readyDelay, cancellationToken);

@@ -220,7 +220,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _lastReadFaultRecordType=selectedType;
             _lastReadFaultRecordIndex=selectedIndex;
             Notice=result.Errors.Count==0
-                ? $"{DescribeFaultRecordType(selectedType)}记录 {selectedIndex} 已读取"
+                ? $"{DescribeFaultRecordType(selectedType)}第 {selectedIndex} 条记录已读取"
                 : $"故障数据部分读取失败：{result.Errors[0]}";
         },"读取故障记录失败");
     }

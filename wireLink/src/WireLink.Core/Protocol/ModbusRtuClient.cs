@@ -211,8 +211,8 @@ public sealed class ModbusRtuClient : IModbusRtuClient
                     _trace.Debug($"TX[{attempt}]；{requestContext}；帧={Convert.ToHexString(request)}");
                     await _transport.WriteAsync(request, cancellationToken);
 
-                    // ReadResponseAsync 负责按响应帧结构分段接收，并将内部超时转换为 TimeoutException。
-                    var response = await ReadResponseAsync(_options.ReadTimeout, cancellationToken);
+                    // ReadResponseAsync 负责按请求功能码选择响应帧结构，并将内部超时转换为 TimeoutException。
+                    var response = await ReadResponseAsync(request, _options.ReadTimeout, cancellationToken);
                     _trace.Debug($"RX[{attempt}]；{requestContext}；帧={Convert.ToHexString(response)}");
 
                     // CRC 正确只表示帧未损坏；地址、功能码、长度或回显内容由具体 parser 继续验证。
@@ -296,7 +296,10 @@ public sealed class ModbusRtuClient : IModbusRtuClient
     /// <exception cref="TimeoutException">在指定时间内没有收到完整响应。</exception>
     /// <exception cref="ModbusDeviceException">从机返回功能码最高位为 1 的异常响应。</exception>
     /// <exception cref="ModbusCrcException">完整帧的 CRC 校验失败。</exception>
-    private async Task<byte[]> ReadResponseAsync(TimeSpan timeout, CancellationToken cancellationToken)
+    private async Task<byte[]> ReadResponseAsync(
+        ReadOnlyMemory<byte> request,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
     {
         // 关联令牌同时响应调用方取消和内部响应超时。
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -304,33 +307,51 @@ public sealed class ModbusRtuClient : IModbusRtuClient
         try
         {
             // 所有响应的前两个字节都是从机地址和功能码。
-            // 第三个字节在正常 03H 响应中是数据字节数，在异常响应中则是异常码。
-            var header = new byte[3];
-            await ReadExactlyAsync(header.AsMemory(0, 2), timeoutSource.Token);
+            var prefix = new byte[2];
+            await ReadExactlyAsync(prefix, timeoutSource.Token);
 
             // Modbus 规定异常响应功能码 = 原功能码 | 0x80。
-            var isException = (header[1] & 0x80) != 0;
+            var isException = (prefix[1] & 0x80) != 0;
             if (isException)
             {
                 // 异常帧固定为 5 字节：
                 // [从机地址][异常功能码][异常码][CRC低][CRC高]。
                 var tail = new byte[3];
                 await ReadExactlyAsync(tail, timeoutSource.Token);
-                var exceptionFrame = new[] { header[0], header[1], tail[0], tail[1], tail[2] };
+                var exceptionFrame = new[] { prefix[0], prefix[1], tail[0], tail[1], tail[2] };
                 ValidateCrc(exceptionFrame);
                 throw new ModbusDeviceException(tail[0]);
             }
 
+            var requestFunction = request.Span[1];
+            if (requestFunction == 0x06)
+            {
+                // 正常 06H 响应固定回显完整 8-byte 请求帧：
+                // [从机地址][06][地址高][地址低][值高][值低][CRC低][CRC高]。
+                var tail = new byte[6];
+                await ReadExactlyAsync(tail, timeoutSource.Token);
+                var newFrame = new byte[prefix.Length + tail.Length];
+                prefix.CopyTo(newFrame, 0);
+                tail.CopyTo(newFrame, prefix.Length);
+                ValidateCrc(newFrame);
+                return newFrame;
+            }
+
+            if (requestFunction != 0x03)
+                throw new ModbusProtocolException($"不支持的响应读取功能码：{requestFunction:X2}H。");
+
             // 正常 03H 响应第三字节给出后续寄存器数据的字节数。
-            await ReadExactlyAsync(header.AsMemory(2, 1), timeoutSource.Token);
+            var byteCount = new byte[1];
+            await ReadExactlyAsync(byteCount, timeoutSource.Token);
 
             // 数据部分后面还包含两个 CRC 字节。
-            var tailLength = header[2] + 2;
+            var tailLength = byteCount[0] + 2;
             var tailBytes = new byte[tailLength];
             await ReadExactlyAsync(tailBytes, timeoutSource.Token);
-            var frame = new byte[header.Length + tailBytes.Length];
-            header.CopyTo(frame, 0);
-            tailBytes.CopyTo(frame, header.Length);
+            var frame = new byte[prefix.Length + byteCount.Length + tailBytes.Length];
+            prefix.CopyTo(frame, 0);
+            byteCount.CopyTo(frame, prefix.Length);
+            tailBytes.CopyTo(frame, prefix.Length + byteCount.Length);
             ValidateCrc(frame);
             return frame;
         }

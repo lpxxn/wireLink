@@ -85,6 +85,16 @@ public sealed class ProtocolTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task Client_reads_06h_response_as_fixed_echo_not_byte_count_frame()
+    {
+        await using var transport = new ScriptedTransport(request => request);
+        await using var client = new ModbusRtuClient(transport);
+        await client.OpenAsync(new("test", 9600, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)));
+
+        await client.WriteSingleRegisterAsync(1, 1, 0x0301);
+    }
+
+    [Fact]
     public async Task Device_exception_is_not_retried()
     {
         var trace = new RecordingProtocolTrace();

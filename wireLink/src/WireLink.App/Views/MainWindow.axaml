@@ -254,6 +254,7 @@
                                Minimum="0"
                                Maximum="2000"
                                Increment="50"
+                               ToolTip.Tip="写入 785 后等待芯片准备记录数据；建议约 100ms。"
                                HorizontalAlignment="Stretch"/>
               </StackPanel>
             </Expander>
@@ -380,7 +381,7 @@
                                Maximum="15"
                                Increment="1"
                                IsEnabled="{Binding CanRead}"
-                               ToolTip.Tip="第几条记录 0～15；编码到寄存器 785 的高 8 位。协议未说明第 0 条是最新还是最旧记录"/>
+                               ToolTip.Tip="第几条记录 0～15；编码到寄存器 785 的高 8 位。0 表示最近的一条记录。"/>
                 <TextBlock Grid.Column="2"
                            Text="第几条记录 0～15"
                            VerticalAlignment="Center"
