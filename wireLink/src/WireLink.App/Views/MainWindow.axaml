@@ -360,13 +360,37 @@
 
           <TabItem Header="故障数据">
             <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20">
-              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
-                <Button Grid.Column="1"
+              <Grid ColumnDefinitions="Auto,96,Auto,*,Auto,Auto" ColumnSpacing="8">
+                <ComboBox Classes="input"
+                          ItemsSource="{Binding FaultRecordTypes}"
+                          SelectedItem="{Binding SelectedFaultRecordType}"
+                          IsEnabled="{Binding CanRead}"
+                          MinWidth="86"
+                          ToolTip.Tip="记录类型：故障、报警或变位；编码到寄存器 785 的低 8 位">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FaultRecordTypeOption">
+                      <TextBlock Text="{Binding DisplayName}"/>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+                <NumericUpDown Grid.Column="1"
+                               Classes="input"
+                               Value="{Binding FaultRecordIndex}"
+                               Minimum="0"
+                               Maximum="15"
+                               Increment="1"
+                               IsEnabled="{Binding CanRead}"
+                               ToolTip.Tip="第几条记录 0～15；编码到寄存器 785 的高 8 位。协议未说明第 0 条是最新还是最旧记录"/>
+                <TextBlock Grid.Column="2"
+                           Text="第几条记录 0～15"
+                           VerticalAlignment="Center"
+                           Opacity=".56"/>
+                <Button Grid.Column="4"
                         Classes="secondary"
                         Command="{Binding ReadFaultCommand}"
                         IsEnabled="{Binding CanRead}"
                         Content="立即读取"/>
-                <Button Grid.Column="2"
+                <Button Grid.Column="5"
                         Classes="primary"
                         Command="{Binding ExportFaultCommand}"
                         IsEnabled="{Binding CanExportFault}"

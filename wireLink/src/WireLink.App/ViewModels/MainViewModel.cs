@@ -35,8 +35,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _notice = "请选择串口并打开";
     private AppThemeMode _theme;
     private string _controllerName;
+    private FaultRecordTypeOption _selectedFaultRecordType;
+    private int _faultRecordIndex;
     private DateTimeOffset _deviceReadAt;
     private DateTimeOffset _faultReadAt;
+    private FaultRecordType _lastReadFaultRecordType;
+    private byte _lastReadFaultRecordIndex;
 
     public MainViewModel(IModbusRtuClient client, ISerialPortCatalog ports, IDeviceDataService deviceService,
         IFaultRecordService faultService, ISettingsService settingsService, IProtocolTrace trace, AppSettings settings)
@@ -46,6 +50,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _portName=settings.PortName; _baudRate=settings.BaudRate; _deviceAddress=settings.DeviceAddress;
         _refreshSeconds=settings.RefreshSeconds; _theme=settings.Theme;
         _controllerName=settings.ControllerSeries == BreakerSeries.BW3 ? "BW3 的控制器" : "BW1 的控制器";
+        _selectedFaultRecordType=FaultRecordTypes[0];
         _readTimeoutMilliseconds=settings.ReadTimeoutMilliseconds; _faultDelayMilliseconds=settings.FaultReadyDelayMilliseconds;
         RefreshPortsCommand=ReactiveCommand.Create(RefreshPorts);
         ToggleSerialCommand=ReactiveCommand.CreateFromTask(ToggleSerialAsync);
@@ -64,6 +69,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public IReadOnlyList<int> BaudRates { get; }=[9600,19200,38400,115200];
     public IReadOnlyList<AppThemeMode> Themes { get; }=Enum.GetValues<AppThemeMode>();
     public IReadOnlyList<string> ControllerOptions { get; }=["BW1 的控制器","BW3 的控制器"];
+    public IReadOnlyList<FaultRecordTypeOption> FaultRecordTypes { get; }=
+    [
+        new(FaultRecordType.Fault,"故障"),
+        new(FaultRecordType.Alarm,"报警"),
+        new(FaultRecordType.StateChange,"变位"),
+    ];
     public ObservableCollection<DataRowViewModel> DeviceRows { get; }=[];
     public ObservableCollection<DataRowViewModel> FaultRows { get; }=[];
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> RefreshPortsCommand { get; }
@@ -95,6 +106,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public int RefreshSeconds { get=>_refreshSeconds; set=>this.RaiseAndSetIfChanged(ref _refreshSeconds,Math.Clamp(value,1,3600)); }
     public int ReadTimeoutMilliseconds { get=>_readTimeoutMilliseconds; set=>this.RaiseAndSetIfChanged(ref _readTimeoutMilliseconds,Math.Clamp(value,100,10000)); }
     public int FaultDelayMilliseconds { get=>_faultDelayMilliseconds; set=>this.RaiseAndSetIfChanged(ref _faultDelayMilliseconds,Math.Clamp(value,0,2000)); }
+    public int FaultRecordIndex { get=>_faultRecordIndex; set=>this.RaiseAndSetIfChanged(ref _faultRecordIndex,Math.Clamp(value,0,15)); }
+    public FaultRecordTypeOption SelectedFaultRecordType
+    {
+        get=>_selectedFaultRecordType;
+        set=>this.RaiseAndSetIfChanged(ref _selectedFaultRecordType,value);
+    }
     public string ControllerName
     {
         get=>_controllerName;
@@ -187,7 +204,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if(DeviceAddress is not int address) return;
         await RunBusyAsync(async token =>
         {
-            var result=await _faultService.ReadAsync((byte)address,FaultRecordType.Fault,0,
+            var selectedType=SelectedFaultRecordType.Value;
+            var selectedIndex=(byte)FaultRecordIndex;
+            var result=await _faultService.ReadAsync((byte)address,selectedType,selectedIndex,
                 WordOrder.HighWordFirst,SelectedControllerSeries,
                 TimeSpan.FromMilliseconds(FaultDelayMilliseconds),token);
             if(!result.HasData)
@@ -198,8 +217,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 result.Values,
                 result.Errors.Count>0 ? "本字段读取失败，显示上次成功值" : null);
             _faultReadAt=result.ReadAt;
+            _lastReadFaultRecordType=selectedType;
+            _lastReadFaultRecordIndex=selectedIndex;
             Notice=result.Errors.Count==0
-                ? "故障记录 0 已读取"
+                ? $"{DescribeFaultRecordType(selectedType)}记录 {selectedIndex} 已读取"
                 : $"故障数据部分读取失败：{result.Errors[0]}";
         },"读取故障记录失败");
     }
@@ -255,7 +276,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private void RequestDeviceExport() { if(CanExportDevice) ExportRequested?.Invoke(this,new ExportRequest("设备数据",Flatten(DeviceRows),_deviceReadAt)); }
-    private void RequestFaultExport() { if(CanExportFault) ExportRequested?.Invoke(this,new ExportRequest("故障数据",Flatten(FaultRows),_faultReadAt,FaultRecordType.Fault,0)); }
+    private void RequestFaultExport()
+    {
+        if(CanExportFault)
+            ExportRequested?.Invoke(this,new ExportRequest(
+                "故障数据",Flatten(FaultRows),_faultReadAt,_lastReadFaultRecordType,_lastReadFaultRecordIndex));
+    }
+    private static string DescribeFaultRecordType(FaultRecordType type)=>type switch
+    {
+        FaultRecordType.Fault=>"故障",
+        FaultRecordType.Alarm=>"报警",
+        FaultRecordType.StateChange=>"变位",
+        _=>type.ToString(),
+    };
     private static IReadOnlyList<DecodedValue> Flatten(IEnumerable<DataRowViewModel> rows)=>rows.SelectMany(r=>new[]{r.Left,r.Right}.OfType<DataItemViewModel>()).Select(x=>x.Value).ToArray();
     private static IReadOnlyList<DecodedValue> CreatePlaceholders(IEnumerable<RegisterDefinition> definitions)=>definitions
         .Select(definition=>new DecodedValue(definition.Name,definition.Addresses,"—",definition.Unit,"尚未读取",[],ParseStatus.ReadFailed,"尚未读取",DateTimeOffset.MinValue))

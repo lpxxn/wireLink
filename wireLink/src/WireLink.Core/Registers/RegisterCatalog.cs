@@ -92,7 +92,7 @@ public static class RegisterCatalog
             ValueTransform.BcdDateTime, FormatDescription: "BCD：年月日时分秒"),
         new("软件版本号", [783], RegisterDataType.UInt16, string.Empty, ValueTransform.Multiply, FormatDescription: "协议标注未使用"),
         new("故障记录状态标志", [784], RegisterDataType.UInt16, string.Empty, ValueTransform.FaultRecordStatus, FormatDescription: "见 5.6"),
-        new("指定读取的记录", [785], RegisterDataType.UInt16, string.Empty, ValueTransform.RecordSelector, FormatDescription: "L类型/H序号"),
+        new("指定读取的记录", [785], RegisterDataType.UInt16, string.Empty, ValueTransform.RecordSelector, FormatDescription: "L记录类型/H第几条记录"),
         Number("框架等级", 786, "A"),
         new("额定电流", [787], RegisterDataType.UInt16, "A", ValueTransform.RatedCurrent,
             FormatDescription: "按控制器系列和额定电流序值映射"),

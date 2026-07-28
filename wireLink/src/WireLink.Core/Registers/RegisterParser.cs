@@ -103,7 +103,7 @@ public sealed class RegisterParser
                 ValueTransform.BcdDayHour => DecodeBcdPair((ushort)numeric, "日", "时", 0),
                 ValueTransform.BcdMinuteSecond => DecodeBcdPair((ushort)numeric, "分", "秒", 0),
                 ValueTransform.FaultRecordStatus => (DecodeRecordStatus((ushort)numeric), "按 5.6 位字段解析", ParseStatus.Success, null),
-                ValueTransform.RecordSelector => (DecodeSelector((ushort)numeric), "L=类型，H=记录编号", ParseStatus.Success, null),
+                ValueTransform.RecordSelector => (DecodeSelector((ushort)numeric), "L=记录类型，H=第几条记录", ParseStatus.Success, null),
                 _ => throw new ArgumentOutOfRangeException(),
             };
 
@@ -501,7 +501,7 @@ public sealed class RegisterParser
             FaultRecordType.StateChange => "变位",
             _ => $"未知类型 {(byte)type}",
         };
-        return $"{typeName} / 记录 {index}";
+        return $"{typeName} / 第 {index} 条记录";
     }
 
     private static int DecimalDigits(decimal multiplier)

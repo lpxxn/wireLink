@@ -124,8 +124,8 @@ public sealed class ParserTests
         {
             {785,Sample(785,0x0301)},
         },WordOrder.HighWordFirst).Single();
-        Assert.Equal("报警 / 记录 3",value.Value);
-        Assert.Equal("L=类型，H=记录编号",value.Formula);
+        Assert.Equal("报警 / 第 3 条记录",value.Value);
+        Assert.Equal("L=记录类型，H=第几条记录",value.Formula);
         Assert.Equal(ParseStatus.Success,value.Status);
         Assert.Null(value.Warning);
     }
