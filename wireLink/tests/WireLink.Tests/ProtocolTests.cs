@@ -1,10 +1,11 @@
 using System.Buffers.Binary;
 using WireLink.Core.Communication;
 using WireLink.Core.Protocol;
+using Xunit.Abstractions;
 
 namespace WireLink.Tests;
 
-public sealed class ProtocolTests
+public sealed class ProtocolTests(ITestOutputHelper output)
 {
     [Fact]
     public void Crc_matches_standard_modbus_example()
@@ -19,7 +20,8 @@ public sealed class ProtocolTests
     {
         // 表 3.2：读 3 个变量，起始地址 0x0100，从机地址 0x03
         var frame = Crc16Modbus.Append([0x03, 0x03, 0x01, 0x00, 0x00, 0x03]);
-        Console.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        // Console.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        output.WriteLine($"Frame: {Convert.ToHexString(frame)}");
         Assert.Equal("03030100000305D5", Convert.ToHexString(frame));
         Assert.True(Crc16Modbus.IsValid(frame));
 
@@ -30,19 +32,20 @@ public sealed class ProtocolTests
     {
         // 表 3.2：响应 6 字节数据（3 个寄存器各 2 字节），从机地址 0x03
         var frame = Crc16Modbus.Append([0x03, 0x03, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        Console.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        // Console.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        output.WriteLine($"Frame: {Convert.ToHexString(frame)}");
         Assert.Equal("0303060000000000003815", Convert.ToHexString(frame));
         Assert.True(Crc16Modbus.IsValid(frame));
 
         // 3.4
         frame = Crc16Modbus.Append([0x11, 0x05, 0x00, 0x00, 0xFF, 0x00]);
-        Console.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        output.WriteLine($"Frame: {Convert.ToHexString(frame)}");
         Assert.Equal("11050000FF008EAA", Convert.ToHexString(frame));
         Assert.True(Crc16Modbus.IsValid(frame));
 
         // 3.5
         frame = Crc16Modbus.Append([0x11, 0x05, 0x00, 0x00, 0xFF, 0x00]);
-        Console.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        output.WriteLine($"Frame: {Convert.ToHexString(frame)}");
         Assert.Equal("11050000FF008EAA", Convert.ToHexString(frame));
         Assert.True(Crc16Modbus.IsValid(frame));
 
