@@ -1,0 +1,127 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WireLink.App.Views.ErrorDialogWindow"
+        Width="430"
+        Height="250"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Icon="/Assets/wirelink-icon.png"
+        Title="打开串口失败"
+        KeyDown="OnDialogKeyDown">
+
+  <Window.Styles>
+    <Style Selector="Button.dialog-close">
+      <Setter Property="Width" Value="34"/>
+      <Setter Property="Height" Value="34"/>
+      <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="17"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#667085"/>
+      <Setter Property="FontSize" Value="21"/>
+      <Setter Property="FontWeight" Value="Normal"/>
+    </Style>
+    <Style Selector="Button.dialog-close:pointerover">
+      <Setter Property="Background" Value="#EEF1F6"/>
+      <Setter Property="Foreground" Value="#344054"/>
+    </Style>
+    <Style Selector="Button.dialog-close:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#EEF1F6"/>
+      <Setter Property="Foreground" Value="#344054"/>
+    </Style>
+    <Style Selector="Button.dialog-primary">
+      <Setter Property="Width" Value="96"/>
+      <Setter Property="MinHeight" Value="38"/>
+      <Setter Property="Padding" Value="16,8"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Background" Value="#3D67E8"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.dialog-primary:pointerover">
+      <Setter Property="Background" Value="#315BD8"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.dialog-primary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#315BD8"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+  </Window.Styles>
+
+  <Border Margin="10"
+          Padding="20"
+          Background="#FFFFFFFF"
+          BorderBrush="#E4E8F0"
+          BorderThickness="1"
+          CornerRadius="16"
+          BoxShadow="0 12 32 0 #300F172A">
+    <Grid RowDefinitions="Auto,*,Auto">
+      <Grid ColumnDefinitions="*,Auto">
+        <Grid ColumnDefinitions="Auto,*"
+              ColumnSpacing="12"
+              VerticalAlignment="Center"
+              PointerPressed="OnHeaderPointerPressed">
+          <Border Width="40"
+                  Height="40"
+                  CornerRadius="12"
+                  Background="#FFF0F0">
+            <TextBlock Text="!"
+                       Foreground="#D14343"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+          </Border>
+          <StackPanel Grid.Column="1"
+                      VerticalAlignment="Center"
+                      Spacing="2">
+            <TextBlock x:Name="DialogTitle"
+                       FontSize="17"
+                       FontWeight="SemiBold"/>
+            <TextBlock Text="串口连接未建立"
+                       FontSize="12"
+                       Foreground="#7A8495"/>
+          </StackPanel>
+        </Grid>
+
+        <Button Grid.Column="1"
+                Classes="dialog-close"
+                Content="×"
+                ToolTip.Tip="关闭"
+                Click="OnConfirmClick"/>
+      </Grid>
+
+      <Border Grid.Row="1"
+              Margin="0,18,0,0"
+              Padding="14,12"
+              Background="#FFF7F7"
+              BorderBrush="#F6DADA"
+              BorderThickness="1"
+              CornerRadius="10">
+        <StackPanel Spacing="5">
+          <TextBlock x:Name="DialogMessage"
+                     FontSize="14"
+                     FontWeight="Medium"
+                     Foreground="#822727"
+                     TextWrapping="Wrap"/>
+          <TextBlock Text="请检查端口名称、设备连接和端口占用情况后重试。"
+                     FontSize="12"
+                     Foreground="#9A5B5B"
+                     TextWrapping="Wrap"/>
+        </StackPanel>
+      </Border>
+
+      <Button Grid.Row="2"
+              Classes="dialog-primary"
+              Margin="0,18,0,0"
+              HorizontalAlignment="Right"
+              IsDefault="True"
+              Content="我知道了"
+              Click="OnConfirmClick"/>
+    </Grid>
+  </Border>
+</Window>

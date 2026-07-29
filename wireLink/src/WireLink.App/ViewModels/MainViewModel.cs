@@ -32,7 +32,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _autoRefresh;
     private int _consecutiveFailures;
     private bool _showAddressRequired;
-    private string _notice = "请选择串口并打开";
+    private string _notice = string.Empty;
     private AppThemeMode _theme;
     private string _controllerName;
     private FaultRecordTypeOption _selectedFaultRecordType;
@@ -86,10 +86,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ExportFaultCommand { get; }
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ShowLogCommand { get; }
     public event EventHandler<ExportRequest>? ExportRequested;
+    public event EventHandler<ErrorDialogRequest>? ErrorDialogRequested;
     public event EventHandler? ShowLogRequested;
     public event EventHandler<AppThemeMode>? ThemeChanged;
 
-    public string PortName { get=>_portName; set=>this.RaiseAndSetIfChanged(ref _portName,value); }
+    public string PortName
+    {
+        get=>_portName;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _portName,value);
+            RaiseState();
+        }
+    }
     public int BaudRate { get=>_baudRate; set=>this.RaiseAndSetIfChanged(ref _baudRate,value); }
     public int? DeviceAddress
     {
@@ -131,6 +140,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public IBrush SerialStatusBrush => IsSerialOpen ? Brushes.MediumSeaGreen : Brushes.IndianRed;
     public IBrush DeviceStatusBrush => IsDeviceConnected ? Brushes.MediumSeaGreen : Brushes.Gray;
     public bool CanConfigureSerial => !IsSerialOpen && !IsBusy;
+    public bool CanToggleSerial => !IsBusy && (IsSerialOpen || !string.IsNullOrWhiteSpace(PortName));
     public bool CanTest => IsSerialOpen && !IsBusy;
     public bool CanRead => IsDeviceConnected && !IsBusy;
     public bool CanExportDevice => _deviceReadAt!=default && IsDeviceConnected && !IsBusy;
@@ -138,22 +148,50 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public void RefreshPorts()
     {
-        var current=PortName; PortNames.Clear();
-        foreach(var port in _ports.GetPortNames()) PortNames.Add(port);
-        if(!string.IsNullOrWhiteSpace(current) && !PortNames.Contains(current)) PortNames.Insert(0,current);
+        var current=PortName;
+        try
+        {
+            var availablePorts=_ports.GetPortNames()
+                .Where(port=>!string.IsNullOrWhiteSpace(port))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            PortNames.Clear();
+            foreach(var port in availablePorts) PortNames.Add(port);
+
+            // 保留手动输入的端口名；只有文本为空时才自动选择扫描到的第一个端口。
+            PortName=!string.IsNullOrWhiteSpace(current)
+                ? current
+                : availablePorts.FirstOrDefault() ?? string.Empty;
+            if(availablePorts.Length==0)
+                Notice="未检测到可用串口，请连接串口设备后重新展开端口列表";
+        }
+        catch(Exception ex)
+        {
+            PortNames.Clear();
+            PortName=current;
+            Notice=$"扫描串口失败：{Friendly(ex)}";
+            _trace.Error(Notice,ex);
+        }
+        RaiseState();
     }
 
     private async Task ToggleSerialAsync()
     {
         if(IsBusy) return;
         if(IsSerialOpen) { await CloseSerialAsync(); return; }
-        if(string.IsNullOrWhiteSpace(PortName)) { Notice="请输入或选择串口"; return; }
+        if(string.IsNullOrWhiteSpace(PortName))
+        {
+            Notice="请输入或选择串口";
+            return;
+        }
         await RunBusyAsync(async token =>
         {
             await _client.OpenAsync(new SerialConnectionOptions(PortName,BaudRate,
                 TimeSpan.FromMilliseconds(ReadTimeoutMilliseconds),TimeSpan.FromMilliseconds(ReadTimeoutMilliseconds)),token);
             IsSerialOpen=true; IsDeviceConnected=false; Notice=$"已打开 {PortName}"; await SaveSettingsAsync();
-        },"打开串口失败");
+        },"打开串口失败",showErrorDialog:true);
     }
 
     private async Task CloseSerialAsync()
@@ -233,14 +271,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         },"读取故障记录失败");
     }
 
-    private async Task RunBusyAsync(Func<CancellationToken,Task> action,string prefix,bool disconnectOnError=false,bool countFailure=false)
+    private async Task RunBusyAsync(Func<CancellationToken,Task> action,string prefix,bool disconnectOnError=false,
+        bool countFailure=false,bool showErrorDialog=false)
     {
         IsBusy=true; _operationCancellation=new CancellationTokenSource();
         try { await action(_operationCancellation.Token); }
         catch(OperationCanceledException) { Notice="操作已取消"; }
         catch(Exception ex)
         {
-            Notice=$"{prefix}：{Friendly(ex)}"; _trace.Error(Notice,ex);
+            var message=Friendly(ex);
+            Notice=$"{prefix}：{message}"; _trace.Error(Notice,ex);
+            if(showErrorDialog)
+                ErrorDialogRequested?.Invoke(this,new ErrorDialogRequest(prefix,message));
             if(disconnectOnError) IsDeviceConnected=false;
             if(countFailure && ++_consecutiveFailures>=3) { AutoRefresh=false; IsDeviceConnected=false; }
         }
@@ -253,6 +295,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         ModbusCrcException => "CRC 校验失败",
         ModbusDeviceException device => $"设备异常 {device.ExceptionCode:X2}H：{device.Message}",
         UnauthorizedAccessException => "串口权限不足或被占用",
+        IOException io => $"串口不存在、已断开或通信异常：{io.Message}",
+        ArgumentException argument => $"串口参数无效：{argument.Message}",
         _ => ex.Message,
     };
 
@@ -314,7 +358,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
     private void RaiseState()
     {
-        foreach(var name in new[]{nameof(SerialButtonText),nameof(SerialStatusText),nameof(DeviceStatusText),nameof(SerialStatusBrush),nameof(DeviceStatusBrush),nameof(CanConfigureSerial),nameof(CanTest),nameof(CanRead),nameof(CanExportDevice),nameof(CanExportFault)}) this.RaisePropertyChanged(name);
+        foreach(var name in new[]{nameof(SerialButtonText),nameof(SerialStatusText),nameof(DeviceStatusText),nameof(SerialStatusBrush),nameof(DeviceStatusBrush),nameof(CanConfigureSerial),nameof(CanToggleSerial),nameof(CanTest),nameof(CanRead),nameof(CanExportDevice),nameof(CanExportFault)}) this.RaisePropertyChanged(name);
     }
 
     public async ValueTask DisposeAsync() { await CloseSerialAsync(); await _client.DisposeAsync(); }

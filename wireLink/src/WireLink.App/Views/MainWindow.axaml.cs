@@ -28,12 +28,18 @@ public partial class MainWindow : Window
     {
         DataContext = viewModel; _client = client; _export = export; _logStore = logStore;
         viewModel.ExportRequested += OnExportRequested;
+        viewModel.ErrorDialogRequested += OnErrorDialogRequested;
         viewModel.ShowLogRequested += (_, _) => ShowLogWindow();
         viewModel.ThemeChanged += (_, theme) => (Avalonia.Application.Current as App)?.ApplyTheme(theme);
         KeyDown += OnKeyDown;
     }
 
     private void OnPortDropDownOpened(object? sender, EventArgs e) => (DataContext as MainViewModel)?.RefreshPorts();
+    private async void OnErrorDialogRequested(object? sender, ErrorDialogRequest request)
+    {
+        var dialog=new ErrorDialogWindow(request);
+        await dialog.ShowDialog(this);
+    }
     private void OnDeviceInfoHeaderPressed(object? sender, PointerPressedEventArgs e)
     {
         ShowSlaveAddressScannerWindow();

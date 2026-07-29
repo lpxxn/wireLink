@@ -191,6 +191,7 @@
 
             <Button Classes="primary"
                     Command="{Binding ToggleSerialCommand}"
+                    IsEnabled="{Binding CanToggleSerial}"
                     Content="{Binding SerialButtonText}"
                     HorizontalAlignment="Stretch"/>
 

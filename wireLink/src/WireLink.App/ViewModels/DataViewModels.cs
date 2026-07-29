@@ -3,6 +3,12 @@ using WireLink.Core.Models;
 
 namespace WireLink.App.ViewModels;
 
+public sealed class ErrorDialogRequest(string title,string message) : EventArgs
+{
+    public string Title { get; }=title;
+    public string Message { get; }=message;
+}
+
 public sealed class DataItemViewModel : ViewModelBase
 {
     private DecodedValue _value;
