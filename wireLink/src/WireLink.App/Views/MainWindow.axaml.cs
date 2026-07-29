@@ -37,7 +37,7 @@ public partial class MainWindow : Window
     private void OnPortDropDownOpened(object? sender, EventArgs e) => (DataContext as MainViewModel)?.RefreshPorts();
     private async void OnErrorDialogRequested(object? sender, ErrorDialogRequest request)
     {
-        var dialog=new ErrorDialogWindow(request);
+        var dialog = new ErrorDialogWindow(request);
         await dialog.ShowDialog(this);
     }
     private void OnDeviceInfoHeaderPressed(object? sender, PointerPressedEventArgs e)
@@ -49,12 +49,12 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.F10 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
-            ShowRegisterReaderWindow();
+            ShowSlaveAddressScannerWindow();
             e.Handled = true;
         }
         else if (e.Key == Key.F11 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
-            ShowSlaveAddressScannerWindow();
+            ShowRegisterReaderWindow();
             e.Handled = true;
         }
         else if (e.Key == Key.F12 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))

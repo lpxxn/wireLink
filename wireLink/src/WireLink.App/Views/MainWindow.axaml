@@ -200,7 +200,7 @@
             <Grid ColumnDefinitions="Auto,*"
                   ColumnSpacing="11"
                   Cursor="Hand"
-                  ToolTip.Tip="点击打开从机地址扫描（Shift+F11）"
+                  ToolTip.Tip="点击打开从机地址扫描（Shift+F10）"
                   PointerPressed="OnDeviceInfoHeaderPressed">
               <Border Classes="icon-tile">
                 <TextBlock Text="▣" Foreground="#3D67E8" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
