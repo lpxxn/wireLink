@@ -175,7 +175,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await RunBusyAsync(async token =>
         {
             if(await _deviceService.TestConnectionAsync((byte)address,token))
-            { IsDeviceConnected=true; _consecutiveFailures=0; Notice=$"设备 {address} 连接测试成功"; await SaveSettingsAsync(); }
+            {
+                IsDeviceConnected=true; _consecutiveFailures=0;
+                Notice=$"设备 {address} 连接测试成功"; await SaveSettingsAsync();
+            }
+            else
+            {
+                IsDeviceConnected=false;
+                Notice=$"设备 {address} 连接测试失败：无有效响应";
+            }
         },"连接测试失败", disconnectOnError:true);
     }
 

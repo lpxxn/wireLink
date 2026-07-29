@@ -269,7 +269,7 @@ public sealed class ParserTests
         };
         var values=new RegisterParser().Parse(definitions,samples,WordOrder.HighWordFirst,FaultRecordType.StateChange);
         Assert.All(values,value=>Assert.Equal(ParseStatus.Success,value.Status));
-        Assert.Equal("0x1234",values.Single(x=>x.Name=="故障数据 0").Value);
+        Assert.Equal("4660",values.Single(x=>x.Name=="故障数据 0").Value);
         Assert.DoesNotContain(values,value=>value.Warning?.Contains("数据结构")==true);
     }
 

@@ -313,7 +313,8 @@ public sealed class RegisterParser
         {
             FaultRecordType.Fault => DecodeFaultData0(raw, typeCode, samples, controllerSeries),
             FaultRecordType.Alarm => DecodeAlarmData0(raw, typeCode, samples, controllerSeries),
-            FaultRecordType.StateChange => ($"0x{raw:X4}", "按 5.5 读取变位记录数据 0 原值", ParseStatus.Success, null),
+            FaultRecordType.StateChange =>
+                (raw.ToString(CultureInfo.InvariantCulture), "变位记录数据 0 原始值（十进制）", ParseStatus.Success, null),
             _ when samples.ContainsKey(512) =>
                 (string.Empty, "当前无故障/报警，本字段为空", ParseStatus.Success, null),
             _ => ($"0x{raw:X4}", "无法确定事件类别", ParseStatus.ProtocolUnconfirmed, "当前无有效故障/报警类别"),
