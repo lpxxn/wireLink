@@ -49,10 +49,33 @@ public sealed class ProtocolTests(ITestOutputHelper output)
         Assert.Equal("11050000FF008EAA", Convert.ToHexString(frame));
         Assert.True(Crc16Modbus.IsValid(frame));
 
-        frame = Crc16Modbus.Append([0x06, 0x05, 0x00, 0x03, 0xE8]);
+    }
+
+    [Fact]
+    public void Crc16Modbus_Append_matches_example3()
+    {
+        var frame = Crc16Modbus.Append([0x03, 0x06, 0x05, 0x00, 0x03, 0xE8]);
         output.WriteLine($"Frame: {Convert.ToHexString(frame)}");
-        Assert.Equal("06050003E8885A", Convert.ToHexString(frame));
+        Assert.Equal("0306050003E8885A", Convert.ToHexString(frame));
         Assert.True(Crc16Modbus.IsValid(frame));
+
+        frame = Crc16Modbus.Append([0x11, 0x10, 0x04, 0x08, 0x00, 0x03, 0x06,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        output.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        Assert.Equal("111004080003060000000000004CCA", Convert.ToHexString(frame));
+        Assert.True(Crc16Modbus.IsValid(frame));
+
+        frame = Crc16Modbus.Append([0x11, 0x10, 0x04, 0x08, 0x00, 0x03]);
+        output.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        Assert.Equal("111004080003026A", Convert.ToHexString(frame));
+        Assert.True(Crc16Modbus.IsValid(frame));
+
+
+        // frame = Crc16Modbus.Append([0x11, 0x08, 0x00, 0x0C, 0x00, 0x1A]);
+        // output.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        // Assert.Equal("1108000C001A9BAB", Convert.ToHexString(frame));
+        // Assert.True(Crc16Modbus.IsValid(frame));
+
     }
 
     [Fact]
