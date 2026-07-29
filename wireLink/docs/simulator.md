@@ -62,7 +62,9 @@ dotnet run --project src/WireLink.Simulator -- --port COM11 --baud 9600 --addres
 - `crc`：下一响应发送错误 CRC。
 - `exception 02|03|04`：下一响应返回异常码。
 - `disconnect`：关闭模拟器串口。
-- `fault <type>`：切换模拟事件数据；模拟器内部仍保留故障/报警/变位及 0～15 的样例。
+- `current normal`：清除当前故障/报警，512 显示普通合闸状态。
+- `current fault` 或 `fault`：设置当前过载故障样例，512 置故障标志，515/516～523 返回当前故障数据。
+- `current alarm` 或 `alarm`：设置当前过载预报警样例，512 置报警标志，513～514/515/516 返回当前报警数据。
 - `status`：显示模式、地址和寄存器数。
 - `quit`：退出。
 

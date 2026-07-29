@@ -62,4 +62,41 @@ public sealed class ExportAndSimulatorTests
         Assert.False(Crc16Modbus.IsValid(engine.Process(request)!));
         Assert.True(Crc16Modbus.IsValid(engine.Process(request)!));
     }
+
+    [Fact]
+    public void Simulator_can_switch_current_fault_and_alarm_registers()
+    {
+        var engine=new SimulatorEngine(1);
+
+        engine.SetCurrentEvent(SimulatorCurrentEventMode.Fault);
+        var fault=ReadRegisters(engine,512,12);
+        Assert.Equal(0x0002 | (1 << 3) | (1 << 10),fault[0]);
+        Assert.Equal(0x0700,fault[3]);
+        Assert.Equal(125,fault[4]);
+
+        engine.SetCurrentEvent(SimulatorCurrentEventMode.Alarm);
+        var alarm=ReadRegisters(engine,512,12);
+        Assert.Equal(0x0002 | (1 << 2) | (1 << 11),alarm[0]);
+        Assert.Equal(1 << 2,alarm[1]);
+        Assert.Equal(0x0300,alarm[3]);
+        Assert.Equal(125,alarm[4]);
+
+        engine.SetCurrentEvent(SimulatorCurrentEventMode.Normal);
+        var normal=ReadRegisters(engine,512,12);
+        Assert.Equal(0x0002,normal[0]);
+        Assert.All(normal.Skip(1),value=>Assert.Equal(0,value));
+    }
+
+    private static ushort[] ReadRegisters(SimulatorEngine engine, ushort start, ushort count)
+    {
+        var request=Crc16Modbus.Append([
+            (byte)1, (byte)3,
+            (byte)(start >> 8), (byte)start,
+            (byte)(count >> 8), (byte)count]);
+        var response=engine.Process(request)!;
+        Assert.True(Crc16Modbus.IsValid(response));
+        return Enumerable.Range(0,count)
+            .Select(i=>(ushort)((response[3 + i * 2] << 8) | response[4 + i * 2]))
+            .ToArray();
+    }
 }

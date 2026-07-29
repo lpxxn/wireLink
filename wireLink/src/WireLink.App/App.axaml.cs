@@ -55,6 +55,7 @@ public partial class App : Application
     {
         AppThemeMode.Light => ThemeVariant.Light,
         AppThemeMode.Dark => ThemeVariant.Dark,
-        _ => ThemeVariant.Default,
+        _ => ThemeVariant.Light,
+        // _ => ThemeVariant.Default,
     };
 }

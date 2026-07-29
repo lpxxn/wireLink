@@ -49,6 +49,10 @@ public sealed class ProtocolTests(ITestOutputHelper output)
         Assert.Equal("11050000FF008EAA", Convert.ToHexString(frame));
         Assert.True(Crc16Modbus.IsValid(frame));
 
+        frame = Crc16Modbus.Append([0x06, 0x05, 0x00, 0x03, 0xE8]);
+        output.WriteLine($"Frame: {Convert.ToHexString(frame)}");
+        Assert.Equal("06050003E8885A", Convert.ToHexString(frame));
+        Assert.True(Crc16Modbus.IsValid(frame));
     }
 
     [Fact]

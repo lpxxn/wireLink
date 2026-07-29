@@ -4,10 +4,12 @@ using WireLink.Core.Protocol;
 namespace WireLink.Simulator;
 
 public enum SimulatorFaultMode { Normal, TimeoutOnce, TimeoutContinuous, BadCrcOnce, ExceptionOnce }
+public enum SimulatorCurrentEventMode { Normal, Fault, Alarm }
 
 /// <summary>可独立测试的 Modbus RTU 从站协议内核。</summary>
 public sealed class SimulatorEngine(byte slaveAddress = 1)
 {
+    private readonly object _sync = new();
     private readonly Dictionary<ushort, ushort> _registers = CreateRegisters();
     private readonly Dictionary<(byte Type, byte Index), ushort[]> _records = CreateRecords();
     private byte _selectedType;
@@ -15,10 +17,29 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
 
     public byte SlaveAddress { get; } = slaveAddress;
     public SimulatorFaultMode FaultMode { get; set; }
+    public SimulatorCurrentEventMode CurrentEventMode { get; private set; } = SimulatorCurrentEventMode.Normal;
     public byte ExceptionCode { get; set; } = 0x02;
     public IReadOnlyDictionary<ushort, ushort> Registers => _registers;
+    public int RegisterCount { get { lock (_sync) return _registers.Count; } }
+
+    public void SetCurrentEvent(SimulatorCurrentEventMode mode)
+    {
+        lock (_sync)
+        {
+            CurrentEventMode = mode;
+            LoadCurrentEvent();
+        }
+    }
 
     public byte[]? Process(ReadOnlySpan<byte> request)
+    {
+        lock (_sync)
+        {
+            return ProcessCore(request);
+        }
+    }
+
+    private byte[]? ProcessCore(ReadOnlySpan<byte> request)
     {
         if (FaultMode is SimulatorFaultMode.TimeoutOnce or SimulatorFaultMode.TimeoutContinuous)
         {
@@ -48,17 +69,20 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
 
     public void Tick()
     {
-        var phase = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
-        _registers[256] = (ushort)(230 + Math.Sin(phase) * 3);
-        _registers[257] = (ushort)(231 + Math.Sin(phase + 2.09) * 3);
-        _registers[258] = (ushort)(229 + Math.Sin(phase + 4.18) * 3);
-        _registers[268] = (ushort)(20 + Math.Abs(Math.Sin(phase)) * 8);
-        _registers[269] = (ushort)(19 + Math.Abs(Math.Sin(phase + 2.09)) * 8);
-        _registers[270] = (ushort)(21 + Math.Abs(Math.Sin(phase + 4.18)) * 8);
-        var energy = ((uint)_registers[432] << 16) | _registers[433];
-        energy += 1;
-        _registers[432] = (ushort)(energy >> 16);
-        _registers[433] = (ushort)energy;
+        lock (_sync)
+        {
+            var phase = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
+            _registers[256] = (ushort)(230 + Math.Sin(phase) * 3);
+            _registers[257] = (ushort)(231 + Math.Sin(phase + 2.09) * 3);
+            _registers[258] = (ushort)(229 + Math.Sin(phase + 4.18) * 3);
+            _registers[268] = (ushort)(20 + Math.Abs(Math.Sin(phase)) * 8);
+            _registers[269] = (ushort)(19 + Math.Abs(Math.Sin(phase + 2.09)) * 8);
+            _registers[270] = (ushort)(21 + Math.Abs(Math.Sin(phase + 4.18)) * 8);
+            var energy = ((uint)_registers[432] << 16) | _registers[433];
+            energy += 1;
+            _registers[432] = (ushort)(energy >> 16);
+            _registers[433] = (ushort)energy;
+        }
     }
 
     private byte[] Read(ReadOnlySpan<byte> request)
@@ -108,6 +132,41 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         // 暂按实机返回“额定电流序值”模拟：BW1/BW3 的序值 4 都对应 630A，变比为 1。
         map[512]=0x0002; map[784]=0x0444; map[786]=1600; map[787]=4; map[1031]=128;
         return map;
+    }
+
+    private void LoadCurrentEvent()
+    {
+        // 清空当前事件区：513～514 当前报警位图，515 类型/相别，516～523 数据 0～7。
+        _registers[512] = 0x0002;
+        for (ushort address = 513; address <= 523; address++) _registers[address] = 0;
+
+        switch (CurrentEventMode)
+        {
+            case SimulatorCurrentEventMode.Fault:
+                // 运行状态 bit3=故障跳闸，bit10=新故障；515 高字节 07H=过载故障，低字节 00H=A相。
+                _registers[512] = 0x0002 | (1 << 3) | (1 << 10);
+                _registers[515] = 0x0700;
+                _registers[516] = 125;
+                _registers[517] = 10;
+                _registers[518] = 0;
+                _registers[519] = 160;
+                _registers[520] = 125;
+                _registers[521] = 121;
+                _registers[522] = 118;
+                _registers[523] = 5;
+                break;
+            case SimulatorCurrentEventMode.Alarm:
+                // 运行状态 bit2=有报警，bit11=新报警；当前报警 bit2=过载预报警。
+                _registers[512] = 0x0002 | (1 << 2) | (1 << 11);
+                _registers[513] = 1 << 2;
+                _registers[514] = 0;
+                _registers[515] = 0x0300;
+                _registers[516] = 125;
+                break;
+            case SimulatorCurrentEventMode.Normal:
+            default:
+                break;
+        }
     }
 
     private static Dictionary<(byte,byte),ushort[]> CreateRecords()
