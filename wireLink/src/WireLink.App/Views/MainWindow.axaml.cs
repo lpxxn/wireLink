@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private ILogStore? _logStore;
     private LogWindow? _logWindow;
     private RegisterReaderWindow? _registerReaderWindow;
+    private SlaveAddressScannerWindow? _slaveAddressScannerWindow;
     private IModbusRtuClient? _client;
 
     public MainWindow()
@@ -33,11 +34,21 @@ public partial class MainWindow : Window
     }
 
     private void OnPortDropDownOpened(object? sender, EventArgs e) => (DataContext as MainViewModel)?.RefreshPorts();
+    private void OnDeviceInfoHeaderPressed(object? sender, PointerPressedEventArgs e)
+    {
+        ShowSlaveAddressScannerWindow();
+        e.Handled = true;
+    }
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F11 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        if (e.Key == Key.F10 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             ShowRegisterReaderWindow();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F11 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            ShowSlaveAddressScannerWindow();
             e.Handled = true;
         }
         else if (e.Key == Key.F12 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
@@ -83,6 +94,16 @@ public partial class MainWindow : Window
         _registerReaderWindow = new RegisterReaderWindow(new RegisterReaderViewModel(_client, mainViewModel));
         _registerReaderWindow.Closed += (_, _) => _registerReaderWindow = null;
         _registerReaderWindow.Show(this);
+    }
+
+    private void ShowSlaveAddressScannerWindow()
+    {
+        if (_client is null || DataContext is not MainViewModel mainViewModel) return;
+        if (_slaveAddressScannerWindow is { } existing) { existing.Activate(); return; }
+        _slaveAddressScannerWindow = new SlaveAddressScannerWindow(
+            new SlaveAddressScannerViewModel(_client, mainViewModel));
+        _slaveAddressScannerWindow.Closed += (_, _) => _slaveAddressScannerWindow = null;
+        _slaveAddressScannerWindow.Show(this);
     }
 
     private async void OnExportRequested(object? sender, ExportRequest request)

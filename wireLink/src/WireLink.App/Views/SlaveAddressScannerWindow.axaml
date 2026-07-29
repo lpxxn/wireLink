@@ -1,0 +1,79 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WireLink.App.ViewModels"
+        x:Class="WireLink.App.Views.SlaveAddressScannerWindow"
+        x:DataType="vm:SlaveAddressScannerViewModel"
+        Width="520"
+        Height="520"
+        MinWidth="460"
+        MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/wirelink-icon.png"
+        Title="从机地址扫描">
+  <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="18">
+    <StackPanel Spacing="5">
+      <TextBlock Text="从机地址扫描" FontSize="22" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding ConnectionText}" Opacity=".58"/>
+    </StackPanel>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,*,Auto,Auto" ColumnSpacing="12">
+      <StackPanel Spacing="7">
+        <TextBlock Text="起始地址" FontWeight="Medium"/>
+        <NumericUpDown Value="{Binding FromAddress}"
+                       Minimum="1"
+                       Maximum="247"
+                       Increment="1"
+                       FormatString="0"
+                       Height="42"
+                       IsEnabled="{Binding !IsScanning}"/>
+      </StackPanel>
+      <StackPanel Grid.Column="1" Spacing="7">
+        <TextBlock Text="结束地址" FontWeight="Medium"/>
+        <NumericUpDown Value="{Binding ToAddress}"
+                       Minimum="1"
+                       Maximum="247"
+                       Increment="1"
+                       FormatString="0"
+                       Height="42"
+                       IsEnabled="{Binding !IsScanning}"/>
+      </StackPanel>
+      <Button Grid.Column="2"
+              VerticalAlignment="Bottom"
+              Height="42"
+              Padding="20,0"
+              Classes="primary"
+              Command="{Binding ScanCommand}"
+              IsEnabled="{Binding CanScan}"
+              Content="开始扫描"/>
+      <Button Grid.Column="3"
+              VerticalAlignment="Bottom"
+              Height="42"
+              Padding="20,0"
+              Command="{Binding StopCommand}"
+              IsEnabled="{Binding CanStop}"
+              Content="停止"/>
+    </Grid>
+
+    <StackPanel Grid.Row="2" Spacing="6">
+      <Border Background="#EEF3FF" CornerRadius="8" Padding="12">
+        <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+      </Border>
+      <TextBlock Text="{Binding ProgressText}" Opacity=".58" IsVisible="{Binding IsScanning}"/>
+    </StackPanel>
+
+    <Border Grid.Row="3"
+            Background="#F5F7FB"
+            BorderBrush="#E1E6EF"
+            BorderThickness="1"
+            CornerRadius="10"
+            Padding="12">
+      <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <TextBlock Text="可通信从机" Opacity=".58"/>
+        <ListBox Grid.Row="1"
+                 ItemsSource="{Binding FoundAddresses}"
+                 FontFamily="Consolas,monospace"
+                 FontSize="15"/>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>
