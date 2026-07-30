@@ -129,7 +129,7 @@
   <Grid Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
     <Grid ColumnDefinitions="292,*" ColumnSpacing="18" Margin="18">
       <!-- 左侧控制台：按原型将串口与设备设置收拢为一张控制卡。 -->
-      <Border Classes="panel" Padding="20">
+      <Border Classes="panel" Padding="20,20,0,20">
         <ScrollViewer VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
           <ScrollViewer.Styles>
@@ -148,7 +148,7 @@
               <Setter Property="Background" Value="#64748B"/>
             </Style>
           </ScrollViewer.Styles>
-          <StackPanel Spacing="18">
+          <StackPanel Spacing="18" Margin="0,0,20,0">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
               <Border Classes="icon-tile">
                 <TextBlock Text="↔" Foreground="#3D67E8" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
