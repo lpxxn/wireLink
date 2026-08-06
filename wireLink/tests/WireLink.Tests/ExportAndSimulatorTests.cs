@@ -1,6 +1,7 @@
 using ClosedXML.Excel;
 using WireLink.Core.Models;
 using WireLink.Core.Protocol;
+using WireLink.Core.Registers;
 using WireLink.Core.Services;
 using WireLink.Infrastructure.Export;
 using WireLink.Simulator;
@@ -61,6 +62,62 @@ public sealed class ExportAndSimulatorTests
         var request=Crc16Modbus.Append([1,3,1,0,0,1]);
         Assert.False(Crc16Modbus.IsValid(engine.Process(request)!));
         Assert.True(Crc16Modbus.IsValid(engine.Process(request)!));
+    }
+
+    [Fact]
+    public void Simulator_exposes_all_18_waveform_blocks_but_not_address_gaps()
+    {
+        var engine=new SimulatorEngine(1);
+        foreach(var block in WaveformCatalog.Blocks)
+        {
+            var values=ReadRegisters(engine,block.StartAddress,block.Count);
+            Assert.Equal(WaveformCatalog.SamplesPerBlock,values.Length);
+            Assert.Contains(values,value=>WaveformSampleDecoder.DecodeSigned(value)!=0);
+        }
+
+        var gapRequest=Crc16Modbus.Append([1,3,0xB0,0xC0,0,1]);
+        var gapResponse=engine.Process(gapRequest)!;
+        Assert.True(Crc16Modbus.IsValid(gapResponse));
+        Assert.Equal(0x83,gapResponse[1]);
+        Assert.Equal(0x02,gapResponse[2]);
+    }
+
+    [Fact]
+    public async Task Waveform_excel_contains_analysis_and_address_detail_sheets()
+    {
+        var path=Path.Combine(Path.GetTempPath(),$"wirelink-waveform-{Guid.NewGuid():N}.xlsx");
+        try
+        {
+            var points=Enumerable.Range(0,WaveformCatalog.PointsPerPhase).Select(index=>
+            {
+                var segment=index/WaveformCatalog.SamplesPerBlock;
+                var local=index%WaveformCatalog.SamplesPerBlock;
+                return new WaveformPoint(
+                    index,segment,local,WaveformCatalog.GetTimeMilliseconds(index),
+                    (short)index,(short)(index+1000),(short)(-index),
+                    (ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.A).StartAddress+local),
+                    (ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.B).StartAddress+local),
+                    (ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.C).StartAddress+local));
+            }).ToArray();
+            var data=new WaveformData(DateTimeOffset.Now,WaveformCatalog.SampleRateHz,points,1.25,2.5,3.75);
+
+            await new ClosedXmlExportService().ExportAsync(
+                path,new WaveformExcelExportContext("录波数据",data));
+
+            using var book=new XLWorkbook(path);
+            var analysis=book.Worksheet("波形数据");
+            var details=book.Worksheet("读取明细");
+            Assert.Equal("采样序号",analysis.Cell(7,1).GetString());
+            Assert.Equal(391,analysis.LastRowUsed()!.RowNumber());
+            Assert.Equal(-80,analysis.Cell(8,2).GetDouble());
+            Assert.Equal(0,analysis.Cell(8,3).GetDouble());
+            Assert.Equal(XLDataType.Number,analysis.Cell(8,2).DataType);
+            Assert.Equal(1153,details.LastRowUsed()!.RowNumber());
+            Assert.Equal("0xB000",details.Cell(2,8).GetString());
+            Assert.Equal("0xB5BF",details.Cell(1153,8).GetString());
+            Assert.Equal(-383,details.Cell(1153,9).GetDouble());
+        }
+        finally { if(File.Exists(path))File.Delete(path); }
     }
 
     [Fact]

@@ -1,5 +1,8 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media;
+using LiveChartsCore;
+using LiveChartsCore.Defaults;
+using LiveChartsCore.SkiaSharpView;
 using ReactiveUI;
 using WireLink.Core.Communication;
 using WireLink.Core.Models;
@@ -16,6 +19,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly ISerialPortCatalog _ports;
     private readonly IDeviceDataService _deviceService;
     private readonly IFaultRecordService _faultService;
+    private readonly IWaveformDataService _waveformService;
     private readonly ISettingsService _settingsService;
     private readonly IProtocolTrace _trace;
     private CancellationTokenSource? _operationCancellation;
@@ -41,12 +45,22 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private DateTimeOffset _faultReadAt;
     private FaultRecordType _lastReadFaultRecordType;
     private byte _lastReadFaultRecordIndex;
+    private WaveformData? _waveformData;
+    private string _waveformProgressText = "尚未读取完整录波数据";
+    private string _waveformSummary = "采样率、点数和 RMS 将在完整读取后显示";
+    private bool _showPhaseA = true;
+    private bool _showPhaseB = true;
+    private bool _showPhaseC = true;
+    private readonly LineSeries<ObservablePoint> _phaseASeries = CreateWaveformSeries("A 相");
+    private readonly LineSeries<ObservablePoint> _phaseBSeries = CreateWaveformSeries("B 相");
+    private readonly LineSeries<ObservablePoint> _phaseCSeries = CreateWaveformSeries("C 相");
 
     public MainViewModel(IModbusRtuClient client, ISerialPortCatalog ports, IDeviceDataService deviceService,
-        IFaultRecordService faultService, ISettingsService settingsService, IProtocolTrace trace, AppSettings settings)
+        IFaultRecordService faultService, IWaveformDataService waveformService,
+        ISettingsService settingsService, IProtocolTrace trace, AppSettings settings)
     {
         _client=client; _ports=ports; _deviceService=deviceService; _faultService=faultService;
-        _settingsService=settingsService; _trace=trace;
+        _waveformService=waveformService; _settingsService=settingsService; _trace=trace;
         _portName=settings.PortName; _baudRate=settings.BaudRate; _deviceAddress=settings.DeviceAddress;
         _refreshSeconds=settings.RefreshSeconds; _theme=settings.Theme;
         _controllerName=settings.ControllerSeries == BreakerSeries.BW3 ? "BW3 的控制器" : "BW1 的控制器";
@@ -57,12 +71,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         TestConnectionCommand=ReactiveCommand.CreateFromTask(TestConnectionAsync);
         ReadDeviceCommand=ReactiveCommand.CreateFromTask(ReadDeviceAsync);
         ReadFaultCommand=ReactiveCommand.CreateFromTask(ReadFaultAsync);
+        ReadWaveformCommand=ReactiveCommand.CreateFromTask(ReadWaveformAsync);
         ExportDeviceCommand=ReactiveCommand.Create(RequestDeviceExport);
         ExportFaultCommand=ReactiveCommand.Create(RequestFaultExport);
+        ExportWaveformCommand=ReactiveCommand.Create(RequestWaveformExport);
         ShowLogCommand=ReactiveCommand.Create(() => ShowLogRequested?.Invoke(this, EventArgs.Empty));
         RefreshPorts();
         Merge(DeviceRows,CreatePlaceholders(RegisterCatalog.DeviceDefinitions),null);
         Merge(FaultRows,CreatePlaceholders(RegisterCatalog.FaultDefinitions),null);
+        RefreshWaveformSeries();
     }
 
     public ObservableCollection<string> PortNames { get; }=[];
@@ -77,15 +94,27 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     ];
     public ObservableCollection<DataRowViewModel> DeviceRows { get; }=[];
     public ObservableCollection<DataRowViewModel> FaultRows { get; }=[];
+    public ObservableCollection<ISeries> WaveformSeries { get; }=[];
+    public Axis[] WaveformXAxes { get; } =
+    [
+        new Axis { Name = "相对故障时间 (ms)", Labeler = value => value.ToString("0.###") },
+    ];
+    public Axis[] WaveformYAxes { get; } =
+    [
+        new Axis { Name = "原始采样值 (AD)", Labeler = value => value.ToString("0") },
+    ];
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> RefreshPortsCommand { get; }
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ToggleSerialCommand { get; }
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> TestConnectionCommand { get; }
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ReadDeviceCommand { get; }
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ReadFaultCommand { get; }
+    public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ReadWaveformCommand { get; }
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ExportDeviceCommand { get; }
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ExportFaultCommand { get; }
+    public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ExportWaveformCommand { get; }
     public ReactiveCommand<System.Reactive.Unit,System.Reactive.Unit> ShowLogCommand { get; }
     public event EventHandler<ExportRequest>? ExportRequested;
+    public event EventHandler<WaveformExportRequest>? WaveformExportRequested;
     public event EventHandler<ErrorDialogRequest>? ErrorDialogRequested;
     public event EventHandler? ShowLogRequested;
     public event EventHandler<AppThemeMode>? ThemeChanged;
@@ -145,6 +174,34 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanRead => IsDeviceConnected && !IsBusy;
     public bool CanExportDevice => _deviceReadAt!=default && IsDeviceConnected && !IsBusy;
     public bool CanExportFault => _faultReadAt!=default && IsDeviceConnected && !IsBusy;
+    public bool CanExportWaveform => _waveformData is not null && IsDeviceConnected && !IsBusy;
+    public bool HasWaveformData => _waveformData is not null;
+    public bool HasNoWaveformData => _waveformData is null;
+    public string WaveformProgressText
+    {
+        get => _waveformProgressText;
+        private set => this.RaiseAndSetIfChanged(ref _waveformProgressText, value);
+    }
+    public string WaveformSummary
+    {
+        get => _waveformSummary;
+        private set => this.RaiseAndSetIfChanged(ref _waveformSummary, value);
+    }
+    public bool ShowPhaseA
+    {
+        get => _showPhaseA;
+        set { this.RaiseAndSetIfChanged(ref _showPhaseA, value); RefreshWaveformSeries(); }
+    }
+    public bool ShowPhaseB
+    {
+        get => _showPhaseB;
+        set { this.RaiseAndSetIfChanged(ref _showPhaseB, value); RefreshWaveformSeries(); }
+    }
+    public bool ShowPhaseC
+    {
+        get => _showPhaseC;
+        set { this.RaiseAndSetIfChanged(ref _showPhaseC, value); RefreshWaveformSeries(); }
+    }
 
     public void RefreshPorts()
     {
@@ -271,6 +328,33 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         },"读取故障记录失败");
     }
 
+    private async Task ReadWaveformAsync()
+    {
+        if(!CanRead || DeviceAddress is not int address) return;
+        await RunBusyAsync(async token =>
+        {
+            WaveformProgressText=$"准备读取 0/{WaveformCatalog.TotalBlocks}";
+            var progress=new Progress<WaveformReadProgress>(value =>
+            {
+                var block=value.CurrentBlock;
+                WaveformProgressText=$"正在读取 {value.CompletedBlocks}/{value.TotalBlocks}：{block.Phase} 相，{block.TimeRangeText}，地址 {block.StartAddress:X4}H";
+            });
+            var data=await _waveformService.ReadAsync((byte)address,progress,token);
+
+            // 只有 18 块全部成功后才替换上一次完整结果。
+            _waveformData=data;
+            _phaseASeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseA)).ToArray();
+            _phaseBSeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseB)).ToArray();
+            _phaseCSeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseC)).ToArray();
+            WaveformSummary=$"{data.SampleRateHz:0.###} Hz · 每相 {data.Points.Count} 点 · A/B/C RMS：{data.PhaseARms:0.###} / {data.PhaseBRms:0.###} / {data.PhaseCRms:0.###} AD";
+            WaveformProgressText=$"完整录波读取完成 {data.ReadAt:yyyy-MM-dd HH:mm:ss}";
+            Notice=$"录波数据已更新：每相 {data.Points.Count} 点";
+            this.RaisePropertyChanged(nameof(HasWaveformData));
+            this.RaisePropertyChanged(nameof(HasNoWaveformData));
+            RaiseState();
+        },"读取录波数据失败");
+    }
+
     private async Task RunBusyAsync(Func<CancellationToken,Task> action,string prefix,bool disconnectOnError=false,
         bool countFailure=false,bool showErrorDialog=false)
     {
@@ -334,6 +418,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             ExportRequested?.Invoke(this,new ExportRequest(
                 "故障数据",Flatten(FaultRows),_faultReadAt,_lastReadFaultRecordType,_lastReadFaultRecordIndex));
     }
+    private void RequestWaveformExport()
+    {
+        if(CanExportWaveform && _waveformData is not null)
+            WaveformExportRequested?.Invoke(this,new WaveformExportRequest("录波数据",_waveformData));
+    }
     private static string DescribeFaultRecordType(FaultRecordType type)=>type switch
     {
         FaultRecordType.Fault=>"故障",
@@ -358,7 +447,24 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
     private void RaiseState()
     {
-        foreach(var name in new[]{nameof(SerialButtonText),nameof(SerialStatusText),nameof(DeviceStatusText),nameof(SerialStatusBrush),nameof(DeviceStatusBrush),nameof(CanConfigureSerial),nameof(CanToggleSerial),nameof(CanTest),nameof(CanRead),nameof(CanExportDevice),nameof(CanExportFault)}) this.RaisePropertyChanged(name);
+        foreach(var name in new[]{nameof(SerialButtonText),nameof(SerialStatusText),nameof(DeviceStatusText),nameof(SerialStatusBrush),nameof(DeviceStatusBrush),nameof(CanConfigureSerial),nameof(CanToggleSerial),nameof(CanTest),nameof(CanRead),nameof(CanExportDevice),nameof(CanExportFault),nameof(CanExportWaveform)}) this.RaisePropertyChanged(name);
+    }
+
+    private static LineSeries<ObservablePoint> CreateWaveformSeries(string name)=>new()
+    {
+        Name=name,
+        Values=Array.Empty<ObservablePoint>(),
+        Fill=null,
+        GeometrySize=0,
+        LineSmoothness=0,
+    };
+
+    private void RefreshWaveformSeries()
+    {
+        WaveformSeries.Clear();
+        if(ShowPhaseA) WaveformSeries.Add(_phaseASeries);
+        if(ShowPhaseB) WaveformSeries.Add(_phaseBSeries);
+        if(ShowPhaseC) WaveformSeries.Add(_phaseCSeries);
     }
 
     public async ValueTask DisposeAsync() { await CloseSerialAsync(); await _client.DisposeAsync(); }

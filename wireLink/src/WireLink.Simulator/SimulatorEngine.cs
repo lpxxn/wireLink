@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
+using WireLink.Core.Models;
 using WireLink.Core.Protocol;
+using WireLink.Core.Registers;
 
 namespace WireLink.Simulator;
 
@@ -131,7 +133,34 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         SetUInt32(map,352,2301); SetUInt32(map,354,2310); SetUInt32(map,356,2294); SetUInt32(map,432,7654321);
         // 暂按实机返回“额定电流序值”模拟：BW1/BW3 的序值 4 都对应 630A，变比为 1。
         map[512]=0x0002; map[784]=0x0444; map[786]=1600; map[787]=4; map[1031]=128;
+        LoadWaveformRegisters(map);
         return map;
+    }
+
+    private static void LoadWaveformRegisters(Dictionary<ushort, ushort> map)
+    {
+        foreach (var block in WaveformCatalog.Blocks)
+        {
+            for (var localIndex = 0; localIndex < WaveformCatalog.SamplesPerBlock; localIndex++)
+            {
+                var globalIndex = block.SegmentIndex * WaveformCatalog.SamplesPerBlock + localIndex;
+                var timeSeconds = WaveformCatalog.GetTimeMilliseconds(globalIndex) / 1000d;
+                var phaseRadians = block.Phase switch
+                {
+                    WaveformPhase.A => 0d,
+                    WaveformPhase.B => -2d * Math.PI / 3d,
+                    WaveformPhase.C => 2d * Math.PI / 3d,
+                    _ => 0d,
+                };
+
+                // 50 Hz 三相基波；故障点后幅值升高并叠加快速衰减的直流分量。
+                var amplitude = timeSeconds < 0 ? 6500d : 9200d;
+                var fundamental = amplitude * Math.Sin(2d * Math.PI * 50d * timeSeconds + phaseRadians);
+                var transient = timeSeconds < 0 ? 0d : 2400d * Math.Exp(-timeSeconds / 0.012d);
+                var signedSample = checked((short)Math.Round(fundamental + transient));
+                map[checked((ushort)(block.StartAddress + localIndex))] = unchecked((ushort)signedSample);
+            }
+        }
     }
 
     private void LoadCurrentEvent()

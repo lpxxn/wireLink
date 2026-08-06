@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     {
         DataContext = viewModel; _client = client; _export = export; _logStore = logStore;
         viewModel.ExportRequested += OnExportRequested;
+        viewModel.WaveformExportRequested += OnWaveformExportRequested;
         viewModel.ErrorDialogRequested += OnErrorDialogRequested;
         viewModel.ShowLogRequested += (_, _) => ShowLogWindow();
         viewModel.ThemeChanged += (_, theme) => (Avalonia.Application.Current as App)?.ApplyTheme(theme);
@@ -126,5 +127,20 @@ public partial class MainWindow : Window
         if (file is null) return;
         if (_export is not null)
             await _export.ExportAsync(file.Path.LocalPath, new ExcelExportContext(request.Title, request.Values, request.ReadAt, request.RecordType, request.RecordIndex));
+    }
+
+    private async void OnWaveformExportRequested(object? sender, WaveformExportRequest request)
+    {
+        var suggested = $"{request.Title}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "导出录波 Excel",
+            SuggestedFileName = suggested,
+            DefaultExtension = "xlsx",
+            ShowOverwritePrompt = true,
+            FileTypeChoices = [new FilePickerFileType("Excel 工作簿") { Patterns = ["*.xlsx"] }],
+        });
+        if (file is null || _export is null) return;
+        await _export.ExportAsync(file.Path.LocalPath, new WaveformExcelExportContext(request.Title, request.Data));
     }
 }
