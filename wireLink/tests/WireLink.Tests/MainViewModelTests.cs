@@ -66,6 +66,7 @@ public sealed class MainViewModelTests
             new FakePortCatalog(ports),
             new FakeDeviceDataService(),
             new FakeFaultRecordService(),
+            new FakeWaveformDataService(),
             new FakeSettingsService(),
             trace,
             settings);
@@ -118,6 +119,14 @@ public sealed class MainViewModelTests
             WordOrder wordOrder,BreakerSeries controllerSeries,TimeSpan readyDelay,
             CancellationToken cancellationToken=default)=>
             Task.FromResult(new DataReadResult([],[],DateTimeOffset.Now));
+    }
+
+    private sealed class FakeWaveformDataService : IWaveformDataService
+    {
+        public Task<WaveformData> ReadAsync(byte slaveAddress,
+            IProgress<WaveformReadProgress>? progress=null,
+            CancellationToken cancellationToken=default)=>
+            Task.FromException<WaveformData>(new InvalidOperationException("测试未配置录波数据"));
     }
 
     private sealed class FakeSettingsService : ISettingsService

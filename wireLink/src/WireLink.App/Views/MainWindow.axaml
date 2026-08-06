@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:WireLink.App.ViewModels"
+        xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
         x:Class="WireLink.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Width="1360"
@@ -349,17 +350,49 @@
           </TabItem>
 
           <TabItem Header="录波数据">
-            <Grid Margin="20,14,20,20">
-              <Border BorderBrush="#E3E7EF" BorderThickness="1" CornerRadius="12" Background="#FAFBFD">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-                  <Border Classes="icon-tile" Width="52" Height="52" CornerRadius="16">
-                    <TextBlock Text="〰" FontSize="28" Foreground="#3D67E8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                  </Border>
-                  <TextBlock Text="录波数据暂不可用" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                  <TextBlock Text="寄存器地址、采样率、点数和分包规则确认后，将在这里展示三相曲线。"
-                             Opacity=".56" MaxWidth="520" TextAlignment="Center" TextWrapping="Wrap"/>
-                  <Button Classes="secondary" IsEnabled="False" Content="读取录波数据" HorizontalAlignment="Center"/>
-                </StackPanel>
+            <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20" RowSpacing="12">
+              <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" ColumnSpacing="12">
+                <CheckBox IsChecked="{Binding ShowPhaseA}" Content="A 相" VerticalAlignment="Center"/>
+                <CheckBox Grid.Column="1" IsChecked="{Binding ShowPhaseB}" Content="B 相" VerticalAlignment="Center"/>
+                <CheckBox Grid.Column="2" IsChecked="{Binding ShowPhaseC}" Content="C 相" VerticalAlignment="Center"/>
+                <Button Grid.Column="4"
+                        Classes="secondary"
+                        Command="{Binding ReadWaveformCommand}"
+                        IsEnabled="{Binding CanRead}"
+                        Content="立即读取"/>
+                <Button Grid.Column="5"
+                        Classes="primary"
+                        Command="{Binding ExportWaveformCommand}"
+                        IsEnabled="{Binding CanExportWaveform}"
+                        Content="导出 Excel"/>
+              </Grid>
+
+              <Border Grid.Row="1" Background="#EEF3FF" BorderBrush="#DCE5FA" BorderThickness="1" CornerRadius="10" Padding="14,10">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="3">
+                  <TextBlock Text="{Binding WaveformSummary}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                  <TextBlock Grid.Row="1" Text="{Binding WaveformProgressText}" Opacity=".62" TextWrapping="Wrap"/>
+                  <TextBlock Grid.Column="1" Grid.RowSpan="2" Text="单位：原始 AD" Foreground="#3159D5" VerticalAlignment="Center"/>
+                </Grid>
+              </Border>
+
+              <Border Grid.Row="2" BorderBrush="#E3E7EF" BorderThickness="1" CornerRadius="12" Background="#FAFBFD" Padding="8">
+                <Grid>
+                  <lvc:CartesianChart Series="{Binding WaveformSeries}"
+                                      XAxes="{Binding WaveformXAxes}"
+                                      YAxes="{Binding WaveformYAxes}"
+                                      LegendPosition="Top"
+                                      TooltipPosition="Top"
+                                      IsVisible="{Binding HasWaveformData}"/>
+                  <StackPanel IsVisible="{Binding HasNoWaveformData}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                    <Border Classes="icon-tile" Width="52" Height="52" CornerRadius="16">
+                      <TextBlock Text="〰" FontSize="28" Foreground="#3D67E8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="尚未读取录波数据" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="完整读取 18 个块后显示 A/B/C 三相曲线；读取失败不会覆盖上一次完整结果。"
+                               Opacity=".56" MaxWidth="560" TextAlignment="Center" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Grid>
               </Border>
             </Grid>
           </TabItem>

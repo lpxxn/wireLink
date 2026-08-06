@@ -47,3 +47,5 @@ public sealed record FaultRecordTypeOption(FaultRecordType Value, string Display
 
 public sealed record ExportRequest(string Title, IReadOnlyList<DecodedValue> Values,
     DateTimeOffset ReadAt, FaultRecordType? RecordType = null, byte? RecordIndex = null);
+
+public sealed record WaveformExportRequest(string Title, WaveformData Data);
