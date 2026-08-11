@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using WireLink.App.ViewModels;
 using WireLink.Core.Models;
@@ -12,6 +13,13 @@ public partial class WaveformPointDetailsWindow : Window
 
     public WaveformPointDetailsWindow(WaveformPointDetailsViewModel viewModel) : this() =>
         DataContext = viewModel;
+
+    private void OnBodyScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        // 数据区的水平滚动条是唯一可操作的横向滚动入口。
+        // 将相同的 X 偏移应用到隐藏滚动条的表头，使列标题与数据始终保持对齐。
+        HeaderScrollViewer.Offset = new Vector(BodyScrollViewer.Offset.X, 0);
+    }
 
     public void SetData(WaveformData? data)
     {
