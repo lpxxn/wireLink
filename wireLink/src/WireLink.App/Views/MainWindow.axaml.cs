@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private LogWindow? _logWindow;
     private RegisterReaderWindow? _registerReaderWindow;
     private SlaveAddressScannerWindow? _slaveAddressScannerWindow;
+    private WaveformPointDetailsWindow? _waveformPointDetailsWindow;
     private IModbusRtuClient? _client;
 
     public MainWindow()
@@ -32,6 +33,11 @@ public partial class MainWindow : Window
         viewModel.ErrorDialogRequested += OnErrorDialogRequested;
         viewModel.ShowLogRequested += (_, _) => ShowLogWindow();
         viewModel.ThemeChanged += (_, theme) => (Avalonia.Application.Current as App)?.ApplyTheme(theme);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(MainViewModel.CurrentWaveformData))
+                _waveformPointDetailsWindow?.SetData(viewModel.CurrentWaveformData);
+        };
         KeyDown += OnKeyDown;
     }
 
@@ -48,7 +54,12 @@ public partial class MainWindow : Window
     }
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F10 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        if (e.Key == Key.F8 && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && DataTabs.SelectedItem == WaveformTab)
+        {
+            ShowWaveformPointDetailsWindow();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F10 && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             ShowSlaveAddressScannerWindow();
             e.Handled = true;
@@ -101,6 +112,22 @@ public partial class MainWindow : Window
         _registerReaderWindow = new RegisterReaderWindow(new RegisterReaderViewModel(_client, mainViewModel));
         _registerReaderWindow.Closed += (_, _) => _registerReaderWindow = null;
         _registerReaderWindow.Show(this);
+    }
+
+    private void ShowWaveformPointDetailsWindow()
+    {
+        if (DataContext is not MainViewModel mainViewModel) return;
+        if (_waveformPointDetailsWindow is { } existing)
+        {
+            existing.SetData(mainViewModel.CurrentWaveformData);
+            existing.Activate();
+            return;
+        }
+
+        _waveformPointDetailsWindow = new WaveformPointDetailsWindow(
+            new WaveformPointDetailsViewModel(mainViewModel.CurrentWaveformData));
+        _waveformPointDetailsWindow.Closed += (_, _) => _waveformPointDetailsWindow = null;
+        _waveformPointDetailsWindow.Show(this);
     }
 
     private void ShowSlaveAddressScannerWindow()

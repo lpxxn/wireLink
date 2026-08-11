@@ -270,7 +270,7 @@
 
       <!-- 数据工作区：标签、操作工具栏和表格形成单一连续面板。 -->
       <Border Grid.Column="1" Classes="panel" Padding="0" ClipToBounds="True">
-        <TabControl>
+        <TabControl x:Name="DataTabs">
           <TabItem Header="设备数据">
             <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20">
               <Grid ColumnDefinitions="92,Auto,Auto,*,Auto,Auto" ColumnSpacing="10">
@@ -349,7 +349,7 @@
             </Grid>
           </TabItem>
 
-          <TabItem Header="录波数据">
+          <TabItem x:Name="WaveformTab" Header="录波数据">
             <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20" RowSpacing="12">
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" ColumnSpacing="12">
                 <CheckBox IsChecked="{Binding ShowPhaseA}" Content="A 相" VerticalAlignment="Center"/>

@@ -175,6 +175,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanExportDevice => _deviceReadAt!=default && IsDeviceConnected && !IsBusy;
     public bool CanExportFault => _faultReadAt!=default && IsDeviceConnected && !IsBusy;
     public bool CanExportWaveform => _waveformData is not null && IsDeviceConnected && !IsBusy;
+    public WaveformData? CurrentWaveformData => _waveformData;
     public bool HasWaveformData => _waveformData is not null;
     public bool HasNoWaveformData => _waveformData is null;
     public string WaveformProgressText
@@ -343,6 +344,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             // 只有 18 块全部成功后才替换上一次完整结果。
             _waveformData=data;
+            this.RaisePropertyChanged(nameof(CurrentWaveformData));
             _phaseASeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseA)).ToArray();
             _phaseBSeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseB)).ToArray();
             _phaseCSeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseC)).ToArray();

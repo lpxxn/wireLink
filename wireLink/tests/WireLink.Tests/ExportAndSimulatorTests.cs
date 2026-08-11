@@ -1,4 +1,5 @@
 using ClosedXML.Excel;
+using WireLink.Core.Communication;
 using WireLink.Core.Models;
 using WireLink.Core.Protocol;
 using WireLink.Core.Registers;
@@ -68,11 +69,22 @@ public sealed class ExportAndSimulatorTests
     public void Simulator_exposes_all_18_waveform_blocks_but_not_address_gaps()
     {
         var engine=new SimulatorEngine(1);
-        foreach(var block in WaveformCatalog.Blocks)
+        Assert.Equal(WaveformCatalog.TotalBlocks,PdfWaveformSampleCatalog.Frames.Count);
+        Assert.Equal(
+            WaveformCatalog.Blocks.Select(block=>block.StartAddress),
+            PdfWaveformSampleCatalog.Frames.Select(frame=>frame.StartAddress));
+
+        foreach(var (block,frame) in WaveformCatalog.Blocks.Zip(PdfWaveformSampleCatalog.Frames))
         {
+            Assert.Equal(PdfWaveformSampleCatalog.ResponseLength,frame.Response.Length);
+            Assert.Equal((byte)0x04,frame.Response.Span[0]);
+            Assert.Equal((byte)0x03,frame.Response.Span[1]);
+            Assert.Equal((byte)0x80,frame.Response.Span[2]);
+            Assert.True(Crc16Modbus.IsValid(frame.Response.Span));
+            Assert.Equal(WaveformCatalog.SamplesPerBlock,frame.Registers.Length);
+
             var values=ReadRegisters(engine,block.StartAddress,block.Count);
-            Assert.Equal(WaveformCatalog.SamplesPerBlock,values.Length);
-            Assert.Contains(values,value=>WaveformSampleDecoder.DecodeSigned(value)!=0);
+            Assert.Equal(frame.Registers.ToArray(),values);
         }
 
         var gapRequest=Crc16Modbus.Append([1,3,0xB0,0xC0,0,1]);
@@ -80,6 +92,42 @@ public sealed class ExportAndSimulatorTests
         Assert.True(Crc16Modbus.IsValid(gapResponse));
         Assert.Equal(0x83,gapResponse[1]);
         Assert.Equal(0x02,gapResponse[2]);
+    }
+
+    [Fact]
+    public async Task Simulator_waveform_service_returns_all_pdf_samples_in_phase_and_time_order()
+    {
+        var engine=new SimulatorEngine(1);
+        await using var client=new SimulatorClient(engine);
+
+        var data=await new WaveformDataService(client).ReadAsync(1);
+
+        Assert.Equal(WaveformCatalog.PointsPerPhase,data.Points.Count);
+        foreach(var point in data.Points)
+        {
+            foreach(var phase in Enum.GetValues<WaveformPhase>())
+            {
+                var block=WaveformCatalog.GetBlock(point.SegmentIndex,phase);
+                var source=PdfWaveformSampleCatalog.Frames.Single(frame=>frame.StartAddress==block.StartAddress);
+                var expected=unchecked((short)source.Registers.Span[point.SegmentSampleIndex]);
+                var actual=phase switch
+                {
+                    WaveformPhase.A=>point.PhaseA,
+                    WaveformPhase.B=>point.PhaseB,
+                    WaveformPhase.C=>point.PhaseC,
+                    _=>throw new ArgumentOutOfRangeException(),
+                };
+                Assert.Equal(expected,actual);
+            }
+        }
+
+        Assert.Equal(6704,data.Points[128].PhaseA);
+        Assert.Equal(-7536,data.Points[191].PhaseA);
+        Assert.Equal(1,data.Points[320].PhaseC);
+        Assert.Equal(0,data.Points[^1].PhaseC);
+        Assert.Equal(2142.413718,data.PhaseARms,6);
+        Assert.Equal(1786.377408,data.PhaseBRms,6);
+        Assert.Equal(0.835414,data.PhaseCRms,6);
     }
 
     [Fact]
@@ -155,5 +203,19 @@ public sealed class ExportAndSimulatorTests
         return Enumerable.Range(0,count)
             .Select(i=>(ushort)((response[3 + i * 2] << 8) | response[4 + i * 2]))
             .ToArray();
+    }
+
+    private sealed class SimulatorClient(SimulatorEngine engine) : IModbusRtuClient
+    {
+        public bool IsOpen=>true;
+        public ValueTask OpenAsync(SerialConnectionOptions options,CancellationToken cancellationToken=default)=>
+            ValueTask.CompletedTask;
+        public ValueTask CloseAsync(CancellationToken cancellationToken=default)=>ValueTask.CompletedTask;
+        public Task<ushort[]> ReadHoldingRegistersAsync(byte slaveAddress,ushort startAddress,ushort count,
+            CancellationToken cancellationToken=default)=>
+            Task.FromResult(ReadRegisters(engine,startAddress,count));
+        public Task WriteSingleRegisterAsync(byte slaveAddress,ushort address,ushort value,
+            CancellationToken cancellationToken=default)=>Task.CompletedTask;
+        public ValueTask DisposeAsync()=>ValueTask.CompletedTask;
     }
 }

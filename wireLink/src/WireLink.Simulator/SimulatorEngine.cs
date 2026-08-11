@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using WireLink.Core.Models;
 using WireLink.Core.Protocol;
 using WireLink.Core.Registers;
 
@@ -139,27 +138,11 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
 
     private static void LoadWaveformRegisters(Dictionary<ushort, ushort> map)
     {
-        foreach (var block in WaveformCatalog.Blocks)
+        foreach (var frame in PdfWaveformSampleCatalog.Frames)
         {
-            for (var localIndex = 0; localIndex < WaveformCatalog.SamplesPerBlock; localIndex++)
-            {
-                var globalIndex = block.SegmentIndex * WaveformCatalog.SamplesPerBlock + localIndex;
-                var timeSeconds = WaveformCatalog.GetTimeMilliseconds(globalIndex) / 1000d;
-                var phaseRadians = block.Phase switch
-                {
-                    WaveformPhase.A => 0d,
-                    WaveformPhase.B => -2d * Math.PI / 3d,
-                    WaveformPhase.C => 2d * Math.PI / 3d,
-                    _ => 0d,
-                };
-
-                // 50 Hz 三相基波；故障点后幅值升高并叠加快速衰减的直流分量。
-                var amplitude = timeSeconds < 0 ? 6500d : 9200d;
-                var fundamental = amplitude * Math.Sin(2d * Math.PI * 50d * timeSeconds + phaseRadians);
-                var transient = timeSeconds < 0 ? 0d : 2400d * Math.Exp(-timeSeconds / 0.012d);
-                var signedSample = checked((short)Math.Round(fundamental + transient));
-                map[checked((ushort)(block.StartAddress + localIndex))] = unchecked((ushort)signedSample);
-            }
+            var registers = frame.Registers.Span;
+            for (var localIndex = 0; localIndex < registers.Length; localIndex++)
+                map[checked((ushort)(frame.StartAddress + localIndex))] = registers[localIndex];
         }
     }
 

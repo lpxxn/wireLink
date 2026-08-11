@@ -6,7 +6,22 @@
 dotnet test tests/WireLink.Tests/WireLink.Tests.csproj
 ```
 
-当前覆盖 CRC 标准帧、分段响应、高低字节、CRC 一次重试、设备异常不重试、uint32 两种字序、`[514,513]`、BW1/BW3 额定电流序值映射、电流变比 1/2 及非法序值、百分比原值展示、事件数据 0、完整 BCD 时间和非法 BCD、续寄存器去重、寄存器地址与解析异常日志、Excel 四列约束、模拟器 03H/06H 与错误 CRC。录波测试额外覆盖 PDF B200H/B580H 完整帧 CRC、64 点固定数组、大端有符号解码、RMS、时间轴、18 块顺序、首块失败中止、模拟器合法块/非法间隙，以及录波 Excel 两张工作表。
+当前覆盖 CRC 标准帧、分段响应、高低字节、CRC 一次重试、设备异常不重试、uint32 两种字序、`[514,513]`、BW1/BW3 额定电流序值映射、电流变比 1/2 及非法序值、百分比原值展示、事件数据 0、完整 BCD 时间和非法 BCD、续寄存器去重、寄存器地址与解析异常日志、Excel 四列约束、模拟器 03H/06H 与错误 CRC。录波测试额外覆盖 PDF 全部 18 个完整响应帧的帧长、byte-count、CRC 和拼接 SHA-256，逐块校验模拟器的 1152 个寄存器值，并校验三相各 384 点的拼接顺序、固定 RMS 和时间轴；B200H/B580H 仍保留可读的固定数组与端序测试。此外还覆盖首块失败中止、非法地址间隙和录波 Excel 两张工作表。
+
+录波原始点明细测试固定校验 384 行、1152 个三相值、首末时间、段内序号、三相源地址、有符号 AD，以及负数转换为 16 位补码十六进制和无符号十进制原值的结果。原始值曲线测试锁定 `-1 → 65535`、`-320 → 65216`、`-32768 → 32768`，并校验三相显隐不会丢失底层点数据。
+
+### 调试 PDF 全部三相数据
+
+`WaveformPdfCompleteThreePhaseTests` 提供两个专用测试：
+
+- `Pdf_all_18_blocks_follow_documented_time_then_phase_order` 使用独立的显式地址表校验 18 次读取顺序、时间段、相别、帧长、CRC 和整组 SHA-256。
+- `Pdf_complete_three_phase_snapshot_exposes_every_sample_for_debugging` 生成 `snapshot` 调试对象。可在测试中标注的断点行展开 `Blocks`、`PhaseA`、`PhaseB`、`PhaseC` 和 `Points`；详细测试输出包含 18 块各 64 点及 384 行三相对齐数据。
+
+命令行查看完整输出：
+
+```powershell
+dotnet test tests/WireLink.Tests/WireLink.Tests.csproj --filter "FullyQualifiedName~WaveformPdfCompleteThreePhaseTests" --logger "console;verbosity=detailed"
+```
 
 新增协议规则时至少增加一个正常用例和一个边界/非法用例。外部 PTY/COM 集成测试依赖机器环境，不应使普通 CI 失败；找不到虚拟串口时应明确跳过。
 
