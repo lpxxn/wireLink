@@ -3,7 +3,10 @@ using Avalonia.Media;
 using LiveChartsCore;
 using LiveChartsCore.Defaults;
 using LiveChartsCore.SkiaSharpView;
+using LiveChartsCore.SkiaSharpView.Painting;
+using LiveChartsCore.SkiaSharpView.Painting.Effects;
 using ReactiveUI;
+using SkiaSharp;
 using WireLink.Core.Communication;
 using WireLink.Core.Models;
 using WireLink.Core.Protocol;
@@ -97,7 +100,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<ISeries> WaveformSeries { get; }=[];
     public Axis[] WaveformXAxes { get; } =
     [
-        new Axis { Name = "相对故障时间 (ms)", Labeler = value => value.ToString("0.###") },
+        new Axis
+        {
+            Name = "相对故障时间 (ms)",
+            MinLimit = -80,
+            MaxLimit = 40,
+            MinStep = 20,
+            ForceStepToMin = true,
+            Labeler = value => value.ToString("0.###"),
+            SeparatorsPaint = new SolidColorPaint(new SKColor(148, 163, 184, 150))
+            {
+                StrokeThickness = 1,
+                PathEffect = new DashEffect([5, 5], 0),
+            },
+        },
     ];
     public Axis[] WaveformYAxes { get; } =
     [
@@ -335,10 +351,18 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await RunBusyAsync(async token =>
         {
             WaveformProgressText=$"准备读取 0/{WaveformCatalog.TotalBlocks}";
+            var progressStateLock = new object();
+            var progressCompleted = false;
             var progress=new Progress<WaveformReadProgress>(value =>
             {
-                var block=value.CurrentBlock;
-                WaveformProgressText=$"正在读取 {value.CompletedBlocks}/{value.TotalBlocks}：{block.Phase} 相，{block.TimeRangeText}，地址 {block.StartAddress:X4}H";
+                lock (progressStateLock)
+                {
+                    // Progress<T> 会异步投递到 UI 队列。读取完成后，队列中可能仍留有最后一次 18/18 回调；
+                    // 完成标志一旦置位，就忽略这些迟到的进度，避免“读取完毕”被重新覆盖为“正在读取”。
+                    if (progressCompleted) return;
+                    var block=value.CurrentBlock;
+                    WaveformProgressText=$"正在读取 {value.CompletedBlocks}/{value.TotalBlocks}：{block.Phase} 相，{block.TimeRangeText}，地址 {block.StartAddress:X4}H";
+                }
             });
             var data=await _waveformService.ReadAsync((byte)address,progress,token);
 
@@ -349,7 +373,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _phaseBSeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseB)).ToArray();
             _phaseCSeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseC)).ToArray();
             WaveformSummary=$"{data.SampleRateHz:0.###} Hz · 每相 {data.Points.Count} 点 · A/B/C RMS：{data.PhaseARms:0.###} / {data.PhaseBRms:0.###} / {data.PhaseCRms:0.###} AD";
-            WaveformProgressText=$"完整录波读取完成 {data.ReadAt:yyyy-MM-dd HH:mm:ss}";
+            lock (progressStateLock)
+            {
+                progressCompleted = true;
+                WaveformProgressText=$"完整录波读取完成 {data.ReadAt:yyyy-MM-dd HH:mm:ss}";
+            }
             Notice=$"录波数据已更新：每相 {data.Points.Count} 点";
             this.RaisePropertyChanged(nameof(HasWaveformData));
             this.RaisePropertyChanged(nameof(HasNoWaveformData));

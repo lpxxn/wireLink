@@ -1,4 +1,6 @@
 using System.Reactive.Threading.Tasks;
+using LiveChartsCore.SkiaSharpView.Painting;
+using LiveChartsCore.SkiaSharpView.Painting.Effects;
 using WireLink.App.ViewModels;
 using WireLink.Core.Communication;
 using WireLink.Core.Models;
@@ -53,20 +55,55 @@ public sealed class MainViewModelTests
         Assert.Single(trace.ErrorMessages);
     }
 
+    [Fact]
+    public async Task Waveform_x_axis_uses_dashed_separators_every_20_milliseconds()
+    {
+        await using var viewModel=CreateViewModel([],new AppSettings());
+
+        var axis=Assert.Single(viewModel.WaveformXAxes);
+        Assert.Equal(-80,axis.MinLimit);
+        Assert.Equal(40,axis.MaxLimit);
+        Assert.Equal(20,axis.MinStep);
+        Assert.True(axis.ForceStepToMin);
+        var separatorPaint=Assert.IsType<SolidColorPaint>(axis.SeparatorsPaint);
+        Assert.IsType<DashEffect>(separatorPaint.PathEffect);
+    }
+
+    [Fact]
+    public async Task Completed_waveform_status_is_not_overwritten_by_a_late_18_of_18_progress_callback()
+    {
+        await using var viewModel=CreateViewModel(
+            ["COM10"],
+            new AppSettings(PortName:"COM10"),
+            deviceService:new ConnectedDeviceDataService(),
+            waveformService:new CompletedWaveformDataService());
+
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+        await viewModel.ReadWaveformCommand.Execute().ToTask();
+
+        // 模拟 UI 消息队列：录波服务返回后，最后一个 18/18 进度才到达。
+        await Task.Delay(100);
+
+        Assert.StartsWith("完整录波读取完成",viewModel.WaveformProgressText);
+    }
+
     private static MainViewModel CreateViewModel(
         IReadOnlyList<string> ports,
         AppSettings settings,
         IModbusRtuClient? client=null,
-        IProtocolTrace? trace=null)
+        IProtocolTrace? trace=null,
+        IDeviceDataService? deviceService=null,
+        IWaveformDataService? waveformService=null)
     {
         client??=new FakeClient();
         trace??=new RecordingProtocolTrace();
         return new MainViewModel(
             client,
             new FakePortCatalog(ports),
-            new FakeDeviceDataService(),
+            deviceService ?? new FakeDeviceDataService(),
             new FakeFaultRecordService(),
-            new FakeWaveformDataService(),
+            waveformService ?? new FakeWaveformDataService(),
             new FakeSettingsService(),
             trace,
             settings);
@@ -113,6 +150,16 @@ public sealed class MainViewModelTests
             Task.FromResult(new DataReadResult([],[],DateTimeOffset.Now));
     }
 
+    private sealed class ConnectedDeviceDataService : IDeviceDataService
+    {
+        public Task<bool> TestConnectionAsync(byte slaveAddress,CancellationToken cancellationToken=default)=>
+            Task.FromResult(true);
+
+        public Task<DataReadResult> ReadAsync(byte slaveAddress,WordOrder wordOrder,
+            BreakerSeries controllerSeries,CancellationToken cancellationToken=default)=>
+            Task.FromResult(new DataReadResult([],[],DateTimeOffset.Now));
+    }
+
     private sealed class FakeFaultRecordService : IFaultRecordService
     {
         public Task<DataReadResult> ReadAsync(byte slaveAddress,FaultRecordType type,byte recordIndex,
@@ -127,6 +174,36 @@ public sealed class MainViewModelTests
             IProgress<WaveformReadProgress>? progress=null,
             CancellationToken cancellationToken=default)=>
             Task.FromException<WaveformData>(new InvalidOperationException("测试未配置录波数据"));
+    }
+
+    private sealed class CompletedWaveformDataService : IWaveformDataService
+    {
+        public Task<WaveformData> ReadAsync(byte slaveAddress,
+            IProgress<WaveformReadProgress>? progress=null,
+            CancellationToken cancellationToken=default)
+        {
+            var lastBlock=WaveformCatalog.Blocks[WaveformCatalog.TotalBlocks - 1];
+            _=Task.Run(async () =>
+            {
+                await Task.Delay(25,cancellationToken);
+                progress?.Report(new WaveformReadProgress(
+                    WaveformCatalog.TotalBlocks,
+                    WaveformCatalog.TotalBlocks,
+                    lastBlock));
+            },cancellationToken);
+
+            IReadOnlyList<WaveformPoint> points=
+            [
+                new WaveformPoint(0,0,0,-80,1,2,3,0xAC00,0xAC80,0xAD00),
+            ];
+            return Task.FromResult(new WaveformData(
+                new DateTimeOffset(2026,8,11,12,0,0,TimeSpan.FromHours(8)),
+                3200,
+                points,
+                1,
+                2,
+                3));
+        }
     }
 
     private sealed class FakeSettingsService : ISettingsService
