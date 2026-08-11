@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using WireLink.Core.Protocol;
+using WireLink.Core.Registers;
 
 namespace WireLink.Simulator;
 
@@ -131,7 +132,18 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         SetUInt32(map,352,2301); SetUInt32(map,354,2310); SetUInt32(map,356,2294); SetUInt32(map,432,7654321);
         // 暂按实机返回“额定电流序值”模拟：BW1/BW3 的序值 4 都对应 630A，变比为 1。
         map[512]=0x0002; map[784]=0x0444; map[786]=1600; map[787]=4; map[1031]=128;
+        LoadWaveformRegisters(map);
         return map;
+    }
+
+    private static void LoadWaveformRegisters(Dictionary<ushort, ushort> map)
+    {
+        foreach (var frame in PdfWaveformSampleCatalog.Frames)
+        {
+            var registers = frame.Registers.Span;
+            for (var localIndex = 0; localIndex < registers.Length; localIndex++)
+                map[checked((ushort)(frame.StartAddress + localIndex))] = registers[localIndex];
+        }
     }
 
     private void LoadCurrentEvent()

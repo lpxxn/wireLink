@@ -18,13 +18,15 @@ Core 不依赖 Avalonia、串口、Excel 或日志实现。App 只编排服务�
 - 新寄存器：在 `RegisterCatalog` 添加定义和读取区间；多寄存器字段只增加 `Addresses`，不要添加空名称显示项。
 - 新解析规则：扩展 `ValueTransform`，在 `RegisterParser.ParseOne` 增加纯函数分支和测试。
 - 新导出格式：实现 `IExcelExportService` 或增加新的导出接口；不要让 ViewModel 直接依赖 ClosedXML。
-- 录波：单独新增服务和模型。采样流与普通寄存器轮询共用 `IModbusRtuClient` 的请求锁。
+- 录波：`WaveformCatalog` 固化 18 个读取块，`WaveformDataService` 负责有符号解码、时间轴对齐和 RMS；采样流与普通寄存器轮询共用 `IModbusRtuClient` 的请求锁。
 
 ## 状态与并发
 
 串口打开和设备连接是两个独立状态。打开串口不代表设备应答；连接测试固定读取 256。所有 Modbus 请求在 `ModbusRtuClient` 内通过 `SemaphoreSlim` 串行执行。关闭串口先取消自动刷新和当前操作，掉线不会自动重连。
 
 设备页按最小业务块读取：单个 uint16 字段独立读取，uint32 的两个寄存器作为一个不可拆分业务块读取。成功字段更新；失败业务块的旧字段标记 `Stale`，不会影响其他无业务关系字段。连续三轮含失败会停止自动刷新并清除设备连接状态。故障页一次读取只写一次 785；768～787 与独立字段 1031 分开读取，任一区间失败时仍展示另一区间的成功数据。
+
+录波页严格按时间段和 A/B/C 相顺序发起 18 次读取。任一块最终失败即终止本次读取，不构造残缺 `WaveformData`；ViewModel 只在完整成功后原子替换曲线，因此上一次完整结果不会与新批次混合。页面和 Excel 统一使用有符号原始 AD 值，未获得标定前不标成安培。
 
 ## 配置和日志位置
 

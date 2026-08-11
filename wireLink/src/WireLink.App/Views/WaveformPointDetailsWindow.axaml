@@ -1,0 +1,126 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WireLink.App.ViewModels"
+        x:Class="WireLink.App.Views.WaveformPointDetailsWindow"
+        x:DataType="vm:WaveformPointDetailsViewModel"
+        Width="1360"
+        Height="720"
+        MinWidth="900"
+        MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/wirelink-icon.png"
+        Title="录波原始点明细">
+  <Window.Styles>
+    <Style Selector="Border.table-cell">
+      <Setter Property="BorderBrush" Value="#E3E7EF"/>
+      <Setter Property="BorderThickness" Value="0,0,1,1"/>
+      <Setter Property="Padding" Value="8,7"/>
+    </Style>
+    <Style Selector="TextBlock.table-text">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextAlignment" Value="Center"/>
+      <Setter Property="FontFamily" Value="Consolas,Microsoft YaHei UI,monospace"/>
+    </Style>
+    <Style Selector="SelectableTextBlock.table-text">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextAlignment" Value="Center"/>
+      <Setter Property="FontFamily" Value="Consolas,Microsoft YaHei UI,monospace"/>
+    </Style>
+    <Style Selector="Grid.segment-start">
+      <Setter Property="Background" Value="#FFF3CD"/>
+    </Style>
+    <Style Selector="Grid.segment-start Border.table-cell">
+      <Setter Property="BorderBrush" Value="#E6C96B"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid Margin="20" RowDefinitions="Auto,Auto,*" RowSpacing="14">
+    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="12">
+      <StackPanel Spacing="4">
+        <TextBlock Text="录波原始点明细" FontSize="22" FontWeight="SemiBold"/>
+        <TextBlock Text="每一行对应同一个采样时刻；十六进制原值为有符号 AD 的 16 位补码。" Opacity=".62"/>
+      </StackPanel>
+      <Button Grid.Column="1"
+              Classes="primary"
+              Padding="18,10"
+              IsEnabled="{Binding HasData}"
+              Click="OnExportExcelClick"
+              Content="导出 Excel"/>
+      <Button Grid.Column="2"
+              Classes="primary"
+              Padding="18,10"
+              IsEnabled="{Binding HasData}"
+              Click="OnOpenRawChartClick"
+              Content="原始值画图"/>
+      <Border Grid.Column="3" Background="#EEF3FF" CornerRadius="8" Padding="12,8" VerticalAlignment="Center">
+        <TextBlock Text="录波页快捷键：Shift+F8" Foreground="#3159D5"/>
+      </Border>
+    </Grid>
+
+    <Border Grid.Row="1" Background="#F5F7FB" BorderBrush="#E1E6EF" BorderThickness="1" CornerRadius="8" Padding="12,9">
+      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
+    </Border>
+
+    <Border Grid.Row="2" BorderBrush="#DDE2EA" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+      <Grid RowDefinitions="Auto,*">
+        <!-- 表头使用独立的隐藏水平滚动区：垂直滚动数据时保持固定，水平偏移由代码与数据区同步。 -->
+        <ScrollViewer x:Name="HeaderScrollViewer"
+                      HorizontalScrollBarVisibility="Hidden"
+                      VerticalScrollBarVisibility="Disabled">
+          <Grid MinWidth="1490" ColumnDefinitions="56,120,72,92,92,92,112,86,92,92,112,86,92,92,112,86" Background="#EEF3FF">
+            <Border Classes="table-cell"><TextBlock Classes="table-text" Text="点号" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="1" Classes="table-cell"><TextBlock Classes="table-text" Text="时间段" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="2" Classes="table-cell"><TextBlock Classes="table-text" Text="段内点" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="3" Classes="table-cell"><TextBlock Classes="table-text" Text="时间(ms)" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="4" Classes="table-cell"><TextBlock Classes="table-text" Text="A 地址" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="5" Classes="table-cell"><TextBlock Classes="table-text" Text="A 原值(hex)" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="6" Classes="table-cell"><TextBlock Classes="table-text" Text="A 原值(dec)" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="7" Classes="table-cell"><TextBlock Classes="table-text" Text="A 值(AD)" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="8" Classes="table-cell"><TextBlock Classes="table-text" Text="B 地址" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="9" Classes="table-cell"><TextBlock Classes="table-text" Text="B 原值(hex)" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="10" Classes="table-cell"><TextBlock Classes="table-text" Text="B 原值(dec)" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="11" Classes="table-cell"><TextBlock Classes="table-text" Text="B 值(AD)" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="12" Classes="table-cell"><TextBlock Classes="table-text" Text="C 地址" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="13" Classes="table-cell"><TextBlock Classes="table-text" Text="C 原值(hex)" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="14" Classes="table-cell"><TextBlock Classes="table-text" Text="C 原值(dec)" FontWeight="SemiBold"/></Border>
+            <Border Grid.Column="15" Classes="table-cell"><TextBlock Classes="table-text" Text="C 值(AD)" FontWeight="SemiBold"/></Border>
+          </Grid>
+        </ScrollViewer>
+
+        <!-- 数据区负责显示两个滚动条；水平滚动事件会同时移动上方表头。 -->
+        <ScrollViewer x:Name="BodyScrollViewer"
+                      Grid.Row="1"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto"
+                      ScrollChanged="OnBodyScrollChanged">
+          <ItemsControl MinWidth="1490" ItemsSource="{Binding Rows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:WaveformPointDetailRow">
+                <Grid ColumnDefinitions="56,120,72,92,92,92,112,86,92,92,112,86,92,92,112,86"
+                      MinHeight="35"
+                      Classes.segment-start="{Binding IsSegmentStart}">
+                  <Border Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding SampleNumber}"/></Border>
+                  <Border Grid.Column="1" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding SegmentText}"/></Border>
+                  <Border Grid.Column="2" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding SegmentSampleNumber}"/></Border>
+                  <Border Grid.Column="3" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding TimeMilliseconds, StringFormat='{}{0:0.0000}'}"/></Border>
+                  <Border Grid.Column="4" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseAAddress}"/></Border>
+                  <Border Grid.Column="5" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseAHex}"/></Border>
+                  <Border Grid.Column="6" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseARawDecimal}"/></Border>
+                  <Border Grid.Column="7" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseAValue}"/></Border>
+                  <Border Grid.Column="8" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseBAddress}"/></Border>
+                  <Border Grid.Column="9" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseBHex}"/></Border>
+                  <Border Grid.Column="10" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseBRawDecimal}"/></Border>
+                  <Border Grid.Column="11" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseBValue}"/></Border>
+                  <Border Grid.Column="12" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseCAddress}"/></Border>
+                  <Border Grid.Column="13" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseCHex}"/></Border>
+                  <Border Grid.Column="14" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseCRawDecimal}"/></Border>
+                  <Border Grid.Column="15" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseCValue}"/></Border>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

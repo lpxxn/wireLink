@@ -94,6 +94,65 @@ public sealed class ServiceTests
         Assert.True(await new DeviceDataService(client,new RegisterParser()).TestConnectionAsync(1));
     }
 
+    [Fact]
+    public async Task Waveform_read_requests_18_blocks_and_builds_aligned_points()
+    {
+        await using var client=new FakeClient((start,count)=>
+        {
+            var block=WaveformCatalog.Blocks.Single(item=>item.StartAddress==start);
+            var phaseOffset=block.Phase switch
+            {
+                WaveformPhase.A=>0,
+                WaveformPhase.B=>1000,
+                WaveformPhase.C=>-1000,
+                _=>throw new ArgumentOutOfRangeException(),
+            };
+            return Enumerable.Range(0,count)
+                .Select(index=>unchecked((ushort)(short)(phaseOffset+block.SegmentIndex*64+index)))
+                .ToArray();
+        });
+        var progressEvents=new List<WaveformReadProgress>();
+
+        var result=await new WaveformDataService(client).ReadAsync(
+            4,new InlineProgress<WaveformReadProgress>(progressEvents.Add));
+
+        Assert.Equal(WaveformCatalog.TotalBlocks,client.ReadRequests.Count);
+        Assert.Equal(
+            WaveformCatalog.Blocks.Select(block=>(block.StartAddress,block.Count)),
+            client.ReadRequests.Select(request=>(request.Start,request.Count)));
+        Assert.Equal(384,result.Points.Count);
+        Assert.Equal(-80,result.Points[0].TimeMilliseconds);
+        Assert.Equal(39.6875,result.Points[^1].TimeMilliseconds);
+        Assert.Equal((short)0,result.Points[0].PhaseA);
+        Assert.Equal((short)1000,result.Points[0].PhaseB);
+        Assert.Equal((short)-1000,result.Points[0].PhaseC);
+        Assert.Equal((short)383,result.Points[^1].PhaseA);
+        Assert.Equal((short)1383,result.Points[^1].PhaseB);
+        Assert.Equal((short)-617,result.Points[^1].PhaseC);
+        Assert.Equal((ushort)0xB000,result.Points[0].PhaseAAddress);
+        Assert.Equal((ushort)0xB5BF,result.Points[^1].PhaseCAddress);
+        Assert.Equal(18,progressEvents.Count);
+        Assert.Equal(18,progressEvents[^1].CompletedBlocks);
+    }
+
+    [Fact]
+    public async Task Waveform_read_stops_on_first_failed_block_without_returning_partial_data()
+    {
+        await using var client=new FakeClient((start,count)=>
+        {
+            if(start==0xB240) throw new TimeoutException("模拟录波超时");
+            return new ushort[count];
+        });
+
+        var exception=await Assert.ThrowsAsync<InvalidOperationException>(
+            ()=>new WaveformDataService(client).ReadAsync(4));
+
+        Assert.Contains("B 相",exception.Message);
+        Assert.Contains("0xB240",exception.Message);
+        Assert.Equal(8,client.ReadRequests.Count);
+        Assert.Equal((ushort)0xB240,client.ReadRequests[^1].Start);
+    }
+
     private static ushort[] CreateFaultRecord()
     {
         var raw=new ushort[20];
@@ -107,10 +166,20 @@ public sealed class ServiceTests
     {
         public bool IsOpen=>true;
         public (ushort Address,ushort Value) LastWrite { get; private set; }
+        public List<(ushort Start,ushort Count)> ReadRequests { get; }=[];
         public ValueTask OpenAsync(SerialConnectionOptions options,CancellationToken cancellationToken=default)=>ValueTask.CompletedTask;
         public ValueTask CloseAsync(CancellationToken cancellationToken=default)=>ValueTask.CompletedTask;
-        public Task<ushort[]> ReadHoldingRegistersAsync(byte slaveAddress,ushort startAddress,ushort count,CancellationToken cancellationToken=default)=>Task.FromResult(read(startAddress,count));
+        public Task<ushort[]> ReadHoldingRegistersAsync(byte slaveAddress,ushort startAddress,ushort count,CancellationToken cancellationToken=default)
+        {
+            ReadRequests.Add((startAddress,count));
+            return Task.FromResult(read(startAddress,count));
+        }
         public Task WriteSingleRegisterAsync(byte slaveAddress,ushort address,ushort value,CancellationToken cancellationToken=default){LastWrite=(address,value);return Task.CompletedTask;}
         public ValueTask DisposeAsync()=>ValueTask.CompletedTask;
+    }
+
+    private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value)=>report(value);
     }
 }

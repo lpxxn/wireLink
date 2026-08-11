@@ -12,7 +12,7 @@
     <PackageVersion Include="Irihi.Ursa" Version="2.1.0" />
     <PackageVersion Include="Irihi.Ursa.Themes.Semi" Version="2.1.0" />
     <PackageVersion Include="IconPacks.Avalonia" Version="2.0.0" />
-    <PackageVersion Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.0.5" />
+    <PackageVersion Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.1.0-dev-798" />
     <PackageVersion Include="System.IO.Ports" Version="10.0.10" />
     <PackageVersion Include="ClosedXML" Version="0.105.0" />
     <PackageVersion Include="Serilog" Version="4.3.0" />

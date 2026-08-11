@@ -1,6 +1,6 @@
 # WireLink
 
-WireLink 是面向 USB 转 RS485 设备的跨平台 Modbus RTU 读取、解析、展示和 Excel 导出工具。首版支持设备数据与历史故障记录；录波页保留协议待补充空状态。
+WireLink 是面向 USB 转 RS485 设备的跨平台 Modbus RTU 读取、解析、展示和 Excel 导出工具。当前支持设备数据、历史故障记录，以及固定录波区的三相曲线与 Excel 导出。
 
 ## 快速开始
 
@@ -13,7 +13,7 @@ dotnet test tests/WireLink.Tests/WireLink.Tests.csproj
 dotnet run --project src/WireLink.App/WireLink.App.csproj
 ```
 
-操作顺序：选择或输入串口 → 选择波特率 → 打开串口 → 输入设备地址并选择 BW1/BW3 控制器 → 连接测试 → 读取设备/故障数据。程序恢复上次设置，但不会自动打开串口。
+操作顺序：选择或输入串口 → 选择波特率 → 打开串口 → 输入设备地址并选择 BW1/BW3 控制器 → 连接测试 → 读取设备/故障/录波数据。程序恢复上次设置，但不会自动打开串口。
 
 macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed by system policy`，请按 [发布与签名](docs/release.md) 的调试签名段处理。
 
@@ -23,13 +23,17 @@ macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed b
 - 已实现：设备与故障四列双组表、自动刷新、连续失败停止、浅/深/系统主题、固定 uint32 高字优先解析、Excel 导出。
 - 已实现：F12 非模态日志窗、Debug 原始帧与逐字段公式、滚动文件日志、JSON 设置。
 - 已实现：独立虚拟串口模拟器及超时、CRC、异常码注入。
-- 暂不实现：真实录波读取和曲线、设备参数编辑、遥控、安装器与生产代码签名。
+- 已实现：18 块固定录波读取、三相显隐曲线、AD-RMS、Shift+F8 原始点明细及 uint16 原始值曲线、PDF 全部 18 个原始响应帧模拟与回归测试，以及分析/地址明细 Excel。
+- 暂不实现：录波 AD→A 标定、多条录波选择、设备参数编辑、遥控、安装器与生产代码签名。
 
 ## 文档索引
 
 - [开发计划](docs/development-plan.md)
 - [架构与维护](docs/architecture.md)
 - [协议解析与未确认规则](docs/protocol.md)
+- [故障录波协议解析](docs/waveform-protocol.md)
+- [录波 RMS 公式与解析代码说明](docs/waveform-rms-explained.md)
+- [录波功能实现计划](docs/waveform-implementation-plan.md)
 - [模拟器与虚拟串口](docs/simulator.md)
 - [测试说明](docs/testing.md)
 - [发布、签名与串口权限](docs/release.md)

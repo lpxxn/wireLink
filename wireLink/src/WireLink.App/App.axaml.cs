@@ -31,7 +31,7 @@ public partial class App : Application
             var parser = new RegisterParser(trace);
             var viewModel = new MainViewModel(client, new SerialPortCatalog(),
                 new DeviceDataService(client, parser, trace), new FaultRecordService(client, parser),
-                settingsService, trace, settings);
+                new WaveformDataService(client, trace), settingsService, trace, settings);
             ApplyTheme(settings.Theme);
             var mainWindow = new MainWindow(viewModel, client, new ClosedXmlExportService(), logStore);
             desktop.MainWindow = mainWindow;
