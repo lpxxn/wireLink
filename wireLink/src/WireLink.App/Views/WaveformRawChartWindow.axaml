@@ -1,0 +1,37 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WireLink.App.ViewModels"
+        xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+        x:Class="WireLink.App.Views.WaveformRawChartWindow"
+        x:DataType="vm:WaveformRawChartViewModel"
+        Width="1120"
+        Height="720"
+        MinWidth="760"
+        MinHeight="500"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/wirelink-icon.png"
+        Title="录波未转换原始值曲线">
+  <Grid Margin="20" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="12">
+      <StackPanel Spacing="4">
+        <TextBlock Text="录波未转换原始值曲线" FontSize="22" FontWeight="SemiBold"/>
+        <TextBlock Text="直接按 uint16 显示寄存器值，不执行有符号 int16 转换。" Opacity=".62"/>
+      </StackPanel>
+      <CheckBox Grid.Column="1" IsChecked="{Binding ShowPhaseA}" Content="A 相" VerticalAlignment="Center"/>
+      <CheckBox Grid.Column="2" IsChecked="{Binding ShowPhaseB}" Content="B 相" VerticalAlignment="Center"/>
+      <CheckBox Grid.Column="3" IsChecked="{Binding ShowPhaseC}" Content="C 相" VerticalAlignment="Center"/>
+    </Grid>
+
+    <Border Grid.Row="1" Background="#EEF3FF" BorderBrush="#DCE5FA" BorderThickness="1" CornerRadius="10" Padding="14,10">
+      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
+    </Border>
+
+    <Border Grid.Row="2" BorderBrush="#E3E7EF" BorderThickness="1" CornerRadius="12" Background="#FAFBFD" Padding="8">
+      <lvc:CartesianChart Series="{Binding Series}"
+                          XAxes="{Binding XAxes}"
+                          YAxes="{Binding YAxes}"
+                          LegendPosition="Top"
+                          TooltipPosition="Top"/>
+    </Border>
+  </Grid>
+</Window>

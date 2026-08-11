@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using WireLink.Core.Protocol;
+using WireLink.Core.Registers;
 
 namespace WireLink.Simulator;
 
@@ -132,6 +133,16 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         // 1552.bit0～bit7=4，对应 BW1/BW3 的 630A；bit8～bit11=3 模拟非零框架等级。
         map[512]=0x0002; map[784]=0x0444; map[786]=1600; map[1552]=0x0304; map[1031]=128;
         return map;
+    }
+
+    private static void LoadWaveformRegisters(Dictionary<ushort, ushort> map)
+    {
+        foreach (var frame in PdfWaveformSampleCatalog.Frames)
+        {
+            var registers = frame.Registers.Span;
+            for (var localIndex = 0; localIndex < registers.Length; localIndex++)
+                map[checked((ushort)(frame.StartAddress + localIndex))] = registers[localIndex];
+        }
     }
 
     private void LoadCurrentEvent()
