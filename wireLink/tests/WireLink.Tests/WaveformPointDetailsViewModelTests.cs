@@ -63,6 +63,10 @@ public sealed class WaveformPointDetailsViewModelTests
         Assert.Equal(191, last.PhaseARawDecimal);
         Assert.Equal(65153, last.PhaseBRawDecimal);
         Assert.Equal(0, last.PhaseCRawDecimal);
+
+        Assert.Equal(
+            [1,65,129,193,257,321],
+            viewModel.Rows.Where(row => row.IsSegmentStart).Select(row => row.SampleNumber));
     }
 
     private static WaveformPoint CreatePoint(int sampleIndex)

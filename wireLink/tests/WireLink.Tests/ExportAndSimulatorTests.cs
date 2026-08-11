@@ -169,6 +169,53 @@ public sealed class ExportAndSimulatorTests
     }
 
     [Fact]
+    public async Task Waveform_point_details_excel_matches_the_visible_16_column_384_row_table()
+    {
+        var path=Path.Combine(Path.GetTempPath(),$"wirelink-waveform-points-{Guid.NewGuid():N}.xlsx");
+        try
+        {
+            var points=Enumerable.Range(0,WaveformCatalog.PointsPerPhase).Select(index=>
+            {
+                var segment=index/WaveformCatalog.SamplesPerBlock;
+                var local=index%WaveformCatalog.SamplesPerBlock;
+                return new WaveformPoint(
+                    index,segment,local,WaveformCatalog.GetTimeMilliseconds(index),
+                    checked((short)(index-192)),checked((short)-index),checked((short)(index%3-1)),
+                    checked((ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.A).StartAddress+local)),
+                    checked((ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.B).StartAddress+local)),
+                    checked((ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.C).StartAddress+local)));
+            }).ToArray();
+            var data=new WaveformData(DateTimeOffset.Now,WaveformCatalog.SampleRateHz,points,1,2,3);
+
+            await new ClosedXmlExportService().ExportAsync(
+                path,new WaveformPointDetailsExcelExportContext("录波原始点明细",data));
+
+            using var book=new XLWorkbook(path);
+            var sheet=Assert.Single(book.Worksheets);
+            Assert.Equal("录波原始点明细",sheet.Name);
+            Assert.Equal(385,sheet.LastRowUsed()!.RowNumber());
+            Assert.Equal(16,sheet.LastColumnUsed()!.ColumnNumber());
+            Assert.Equal("点号",sheet.Cell(1,1).GetString());
+            Assert.Equal("C 值(AD)",sheet.Cell(1,16).GetString());
+
+            Assert.Equal(1,sheet.Cell(2,1).GetDouble());
+            Assert.Equal("-80～-60 ms",sheet.Cell(2,2).GetString());
+            Assert.Equal(1,sheet.Cell(2,3).GetDouble());
+            Assert.Equal(-80,sheet.Cell(2,4).GetDouble());
+            Assert.Equal("B000H",sheet.Cell(2,5).GetString());
+            Assert.Equal("FF40H",sheet.Cell(2,6).GetString());
+            Assert.Equal(65344,sheet.Cell(2,7).GetDouble());
+            Assert.Equal(-192,sheet.Cell(2,8).GetDouble());
+            Assert.Equal("B040H",sheet.Cell(2,9).GetString());
+            Assert.Equal("B080H",sheet.Cell(2,13).GetString());
+            Assert.Equal("B5BFH",sheet.Cell(385,13).GetString());
+            Assert.Equal(XLDataType.Number,sheet.Cell(2,7).DataType);
+            Assert.Equal(XLDataType.Number,sheet.Cell(2,8).DataType);
+        }
+        finally { if(File.Exists(path))File.Delete(path); }
+    }
+
+    [Fact]
     public void Simulator_can_switch_current_fault_and_alarm_registers()
     {
         var engine=new SimulatorEngine(1);

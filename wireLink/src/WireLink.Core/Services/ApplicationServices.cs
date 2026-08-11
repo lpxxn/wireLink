@@ -59,10 +59,14 @@ public sealed record ExcelExportContext(
 
 public sealed record WaveformExcelExportContext(string Title, WaveformData Data);
 
+/// <summary>录波原始点明细窗口专用导出上下文；导出的列和窗口中的 16 列表格完全一致。</summary>
+public sealed record WaveformPointDetailsExcelExportContext(string Title, WaveformData Data);
+
 public interface IExcelExportService
 {
     Task ExportAsync(string path, ExcelExportContext context, CancellationToken cancellationToken = default);
     Task ExportAsync(string path, WaveformExcelExportContext context, CancellationToken cancellationToken = default);
+    Task ExportAsync(string path, WaveformPointDetailsExcelExportContext context, CancellationToken cancellationToken = default);
 }
 
 public enum LogLevel { Debug, Information, Warning, Error }

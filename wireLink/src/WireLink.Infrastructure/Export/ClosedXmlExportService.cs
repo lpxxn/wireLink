@@ -55,6 +55,65 @@ public sealed class ClosedXmlExportService : IExcelExportService
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// 导出“录波原始点明细”窗口当前展示的表格：一个三相采样时刻一行，共 16 列、384 行。
+    /// </summary>
+    public Task ExportAsync(
+        string path,
+        WaveformPointDetailsExcelExportContext context,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.Worksheets.Add(SafeSheetName(context.Title));
+        var headers = new[]
+        {
+            "点号", "时间段", "段内点", "时间(ms)",
+            "A 地址", "A 原值(hex)", "A 原值(dec)", "A 值(AD)",
+            "B 地址", "B 原值(hex)", "B 原值(dec)", "B 值(AD)",
+            "C 地址", "C 原值(hex)", "C 原值(dec)", "C 值(AD)",
+        };
+        for (var column = 0; column < headers.Length; column++)
+            sheet.Cell(1,column + 1).Value = headers[column];
+
+        foreach (var (point,index) in context.Data.Points.Select((point,index) => (point,index)))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var row = index + 2;
+            var segmentStart = -80 + point.SegmentIndex * 20;
+            sheet.Cell(row,1).Value = point.SampleIndex + 1;
+            sheet.Cell(row,2).Value = $"{segmentStart}～{segmentStart + 20} ms";
+            sheet.Cell(row,3).Value = point.SegmentSampleIndex + 1;
+            sheet.Cell(row,4).Value = point.TimeMilliseconds;
+            WritePointPhase(sheet,row,5,point.PhaseAAddress,point.PhaseA);
+            WritePointPhase(sheet,row,9,point.PhaseBAddress,point.PhaseB);
+            WritePointPhase(sheet,row,13,point.PhaseCAddress,point.PhaseC);
+
+            // 与窗口一致：每个 64 点时间段的第 1 点使用浅黄色标出数据块边界。
+            if (point.SegmentSampleIndex == 0)
+                sheet.Range(row,1,row,headers.Length).Style.Fill.BackgroundColor = XLColor.FromHtml("#FFF3CD");
+        }
+
+        sheet.Row(1).Style.Font.Bold = true;
+        sheet.Row(1).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF3FF");
+        sheet.Column(4).Style.NumberFormat.Format = "0.0000";
+        sheet.SheetView.FreezeRows(1);
+        sheet.RangeUsed()?.SetAutoFilter();
+        sheet.Columns().AdjustToContents();
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        workbook.SaveAs(path);
+        return Task.CompletedTask;
+    }
+
+    private static void WritePointPhase(IXLWorksheet sheet,int row,int startColumn,ushort address,short value)
+    {
+        var raw = unchecked((ushort)value);
+        sheet.Cell(row,startColumn).Value = $"{address:X4}H";
+        sheet.Cell(row,startColumn + 1).Value = $"{raw:X4}H";
+        sheet.Cell(row,startColumn + 2).Value = (int)raw;
+        sheet.Cell(row,startColumn + 3).Value = (int)value;
+    }
+
     private static void WriteValue(IXLWorksheet sheet, int row, int column, DecodedValue value)
     {
         sheet.Cell(row, column).Value = value.Name;

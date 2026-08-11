@@ -125,7 +125,8 @@ public partial class MainWindow : Window
         }
 
         _waveformPointDetailsWindow = new WaveformPointDetailsWindow(
-            new WaveformPointDetailsViewModel(mainViewModel.CurrentWaveformData));
+            new WaveformPointDetailsViewModel(mainViewModel.CurrentWaveformData),
+            _export);
         _waveformPointDetailsWindow.Closed += (_, _) => _waveformPointDetailsWindow = null;
         _waveformPointDetailsWindow.Show(this);
     }

@@ -21,10 +21,21 @@
       <Setter Property="TextAlignment" Value="Center"/>
       <Setter Property="FontFamily" Value="Consolas,Microsoft YaHei UI,monospace"/>
     </Style>
+    <Style Selector="SelectableTextBlock.table-text">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextAlignment" Value="Center"/>
+      <Setter Property="FontFamily" Value="Consolas,Microsoft YaHei UI,monospace"/>
+    </Style>
+    <Style Selector="Grid.segment-start">
+      <Setter Property="Background" Value="#FFF3CD"/>
+    </Style>
+    <Style Selector="Grid.segment-start Border.table-cell">
+      <Setter Property="BorderBrush" Value="#E6C96B"/>
+    </Style>
   </Window.Styles>
 
   <Grid Margin="20" RowDefinitions="Auto,Auto,*" RowSpacing="14">
-    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="12">
       <StackPanel Spacing="4">
         <TextBlock Text="录波原始点明细" FontSize="22" FontWeight="SemiBold"/>
         <TextBlock Text="每一行对应同一个采样时刻；十六进制原值为有符号 AD 的 16 位补码。" Opacity=".62"/>
@@ -33,9 +44,15 @@
               Classes="primary"
               Padding="18,10"
               IsEnabled="{Binding HasData}"
+              Click="OnExportExcelClick"
+              Content="导出 Excel"/>
+      <Button Grid.Column="2"
+              Classes="primary"
+              Padding="18,10"
+              IsEnabled="{Binding HasData}"
               Click="OnOpenRawChartClick"
               Content="原始值画图"/>
-      <Border Grid.Column="2" Background="#EEF3FF" CornerRadius="8" Padding="12,8" VerticalAlignment="Center">
+      <Border Grid.Column="3" Background="#EEF3FF" CornerRadius="8" Padding="12,8" VerticalAlignment="Center">
         <TextBlock Text="录波页快捷键：Shift+F8" Foreground="#3159D5"/>
       </Border>
     </Grid>
@@ -79,23 +96,25 @@
           <ItemsControl MinWidth="1490" ItemsSource="{Binding Rows}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:WaveformPointDetailRow">
-                <Grid ColumnDefinitions="56,120,72,92,92,92,112,86,92,92,112,86,92,92,112,86" MinHeight="35">
-                  <Border Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding SampleNumber}"/></Border>
-                  <Border Grid.Column="1" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding SegmentText}"/></Border>
-                  <Border Grid.Column="2" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding SegmentSampleNumber}"/></Border>
-                  <Border Grid.Column="3" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding TimeMilliseconds, StringFormat='{}{0:0.0000}'}"/></Border>
-                  <Border Grid.Column="4" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseAAddress}"/></Border>
-                  <Border Grid.Column="5" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseAHex}"/></Border>
-                  <Border Grid.Column="6" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseARawDecimal}"/></Border>
-                  <Border Grid.Column="7" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseAValue}"/></Border>
-                  <Border Grid.Column="8" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseBAddress}"/></Border>
-                  <Border Grid.Column="9" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseBHex}"/></Border>
-                  <Border Grid.Column="10" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseBRawDecimal}"/></Border>
-                  <Border Grid.Column="11" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseBValue}"/></Border>
-                  <Border Grid.Column="12" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseCAddress}"/></Border>
-                  <Border Grid.Column="13" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseCHex}"/></Border>
-                  <Border Grid.Column="14" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseCRawDecimal}"/></Border>
-                  <Border Grid.Column="15" Classes="table-cell"><TextBlock Classes="table-text" Text="{Binding PhaseCValue}"/></Border>
+                <Grid ColumnDefinitions="56,120,72,92,92,92,112,86,92,92,112,86,92,92,112,86"
+                      MinHeight="35"
+                      Classes.segment-start="{Binding IsSegmentStart}">
+                  <Border Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding SampleNumber}"/></Border>
+                  <Border Grid.Column="1" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding SegmentText}"/></Border>
+                  <Border Grid.Column="2" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding SegmentSampleNumber}"/></Border>
+                  <Border Grid.Column="3" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding TimeMilliseconds, StringFormat='{}{0:0.0000}'}"/></Border>
+                  <Border Grid.Column="4" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseAAddress}"/></Border>
+                  <Border Grid.Column="5" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseAHex}"/></Border>
+                  <Border Grid.Column="6" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseARawDecimal}"/></Border>
+                  <Border Grid.Column="7" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseAValue}"/></Border>
+                  <Border Grid.Column="8" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseBAddress}"/></Border>
+                  <Border Grid.Column="9" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseBHex}"/></Border>
+                  <Border Grid.Column="10" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseBRawDecimal}"/></Border>
+                  <Border Grid.Column="11" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseBValue}"/></Border>
+                  <Border Grid.Column="12" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseCAddress}"/></Border>
+                  <Border Grid.Column="13" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseCHex}"/></Border>
+                  <Border Grid.Column="14" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseCRawDecimal}"/></Border>
+                  <Border Grid.Column="15" Classes="table-cell"><SelectableTextBlock Classes="table-text" Text="{Binding PhaseCValue}"/></Border>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

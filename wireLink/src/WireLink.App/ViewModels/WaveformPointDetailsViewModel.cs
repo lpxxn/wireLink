@@ -70,6 +70,9 @@ public sealed record WaveformPointDetailRow(
     ushort PhaseCRawDecimal,
     short PhaseCValue)
 {
+    /// <summary>每个 64 点时间段的第一行，用于在明细表中标出六个数据块的边界。</summary>
+    public bool IsSegmentStart => SegmentSampleNumber == 1;
+
     public static WaveformPointDetailRow FromPoint(WaveformPoint point)
     {
         var segmentStart = -80 + point.SegmentIndex * 20;
