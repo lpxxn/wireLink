@@ -84,8 +84,9 @@ public sealed class DeviceDataService(IModbusRtuClient client, RegisterParser pa
         var errors = new List<string>();
         var readAt = DateTimeOffset.Now;
 
-        // 先读取隐藏的额定电流序值，使随后成功的电流区间可以立即计算。
-        var blocks = RegisterCatalog.DeviceBlocks.OrderByDescending(block => block.StartAddress == 787);
+        // 先读取隐藏的额定电流配置，使随后成功的电流区间可以立即使用 1552.bit0～bit7 计算。
+        var blocks = RegisterCatalog.DeviceBlocks.OrderByDescending(
+            block => block.StartAddress == RegisterCatalog.RatedCurrentRegisterAddress);
         foreach (var block in blocks)
         {
             try
@@ -131,7 +132,7 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
 
         try
         {
-            var raw = await client.ReadHoldingRegistersAsync(slaveAddress, 768, 20, cancellationToken);
+            var raw = await client.ReadHoldingRegistersAsync(slaveAddress, 768, 19, cancellationToken);
             foreach (var (value, index) in raw.Select((value, index) => (value, index)))
             {
                 var address = checked((ushort)(768 + index));
@@ -141,7 +142,22 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            errors.Add($"读取故障记录 768～787 失败：{ex.Message}");
+            errors.Add($"读取故障记录 768～786 失败：{ex.Message}");
+        }
+
+        try
+        {
+            var ratedCurrentConfiguration = await client.ReadHoldingRegistersAsync(
+                slaveAddress, RegisterCatalog.RatedCurrentRegisterAddress, 1, cancellationToken);
+            samples[RegisterCatalog.RatedCurrentRegisterAddress] = new RawRegisterSample(
+                RegisterCatalog.RatedCurrentRegisterAddress,
+                ratedCurrentConfiguration[0],
+                DateTimeOffset.Now);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            errors.Add($"读取额定电流配置 1552 失败：{ex.Message}");
         }
 
         try

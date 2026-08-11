@@ -51,16 +51,17 @@ public sealed class ParserTests
     }
 
     [Fact]
-    public void Current_uses_controller_and_hidden_rated_current_ordinal()
+    public void Current_uses_controller_and_low_byte_of_register_1552()
     {
         var current=RegisterCatalog.DeviceDefinitions.Single(x=>x.Name=="A 相电流");
         var value=new RegisterParser().Parse(
             [current],
-            new Dictionary<ushort,RawRegisterSample>{{268,Sample(268,20)},{787,Sample(787,11)}},
+            // COM5 实机曾返回 0x110F：高位非零，低 8 位序值为 15。
+            new Dictionary<ushort,RawRegisterSample>{{268,Sample(268,20)},{1552,Sample(1552,0x110F)}},
             WordOrder.HighWordFirst,
             controllerSeries:BreakerSeries.BW1).Single();
         Assert.Equal("40",value.Value);
-        Assert.Contains("20 × 电流变比(×2；BW1 序值 11=2002A)",value.Formula);
+        Assert.Contains("20 × 电流变比(×2；1552.bit0～bit7=15；BW1=3200A)",value.Formula);
     }
 
     [Fact]
@@ -96,7 +97,7 @@ public sealed class ParserTests
         var current=RegisterCatalog.DeviceDefinitions.Single(x=>x.Name=="A 相电流");
         var value=new RegisterParser().Parse(
             [current],
-            new Dictionary<ushort,RawRegisterSample>{{268,Sample(268,20)},{787,Sample(787,24)}},
+            new Dictionary<ushort,RawRegisterSample>{{268,Sample(268,20)},{1552,Sample(1552,0x0318)}},
             WordOrder.HighWordFirst,
             controllerSeries:BreakerSeries.BW1).Single();
         Assert.Equal(ParseStatus.InvalidData,value.Status);
@@ -109,7 +110,7 @@ public sealed class ParserTests
         var definition=RegisterCatalog.FaultDefinitions.Single(x=>x.Name=="故障数据 0");
         var samples=new Dictionary<ushort,RawRegisterSample>
         {
-            {771,Sample(771,0x0700)}, {772,Sample(772,125)}, {787,Sample(787,11)},
+            {771,Sample(771,0x0700)}, {772,Sample(772,125)}, {1552,Sample(1552,0x030B)},
         };
         var value=new RegisterParser().Parse(
             [definition],samples,WordOrder.HighWordFirst,FaultRecordType.Fault,BreakerSeries.BW1).Single();
@@ -141,7 +142,7 @@ public sealed class ParserTests
             {512,Sample(512,(1<<2)|(1<<3))},
             {515,Sample(515,0x0700)},
             {516,Sample(516,125)},
-            {787,Sample(787,11)},
+            {1552,Sample(1552,0x030B)},
         };
         var values=new RegisterParser().Parse(
             definitions,samples,WordOrder.HighWordFirst,controllerSeries:BreakerSeries.BW1);
@@ -279,11 +280,11 @@ public sealed class ParserTests
         var definition=RegisterCatalog.FaultDefinitions.Single(x=>x.Name=="额定电流");
         var value=new RegisterParser().Parse(
             [definition],
-            new Dictionary<ushort,RawRegisterSample>{{787,Sample(787,4)}},
+            new Dictionary<ushort,RawRegisterSample>{{1552,Sample(1552,0x0F04)}},
             WordOrder.HighWordFirst,
             controllerSeries:BreakerSeries.BW3).Single();
         Assert.Equal("630 A",value.DisplayValue);
-        Assert.Contains("BW3 额定电流序值 4",value.Formula);
+        Assert.Contains("1552=0x0F04；bit0～bit7=4；BW3",value.Formula);
     }
 
     [Fact]

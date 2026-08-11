@@ -8,6 +8,12 @@ namespace WireLink.Core.Registers;
 /// </summary>
 public static class RegisterCatalog
 {
+    /// <summary>额定电流配置寄存器；bit0～bit7 为额定电流序值。</summary>
+    public const ushort RatedCurrentRegisterAddress = 1552;
+
+    /// <summary>1552 中额定电流序值所占的低 8 位。</summary>
+    public const ushort RatedCurrentOrdinalMask = 0x00FF;
+
     public static IReadOnlyList<RegisterBlock> DeviceBlocks { get; } =
     [
         // 每个无业务依赖的字段独立读取，避免一个地址失败连带清空其他字段。
@@ -39,8 +45,8 @@ public static class RegisterCatalog
         new(521, 1),
         new(522, 1),
         new(523, 1),
-        // 787 返回额定电流序值；它只用于计算设备页电流，不在设备页单独显示。
-        new(787, 1),
+        // 1552.bit0～bit7 是额定电流序值；它只用于计算设备页电流，不在设备页单独显示。
+        new(RatedCurrentRegisterAddress, 1),
     ];
 
     public static IReadOnlyList<RegisterDefinition> DeviceDefinitions { get; } =
@@ -94,8 +100,8 @@ public static class RegisterCatalog
         new("故障记录状态标志", [784], RegisterDataType.UInt16, string.Empty, ValueTransform.FaultRecordStatus, FormatDescription: "见 5.6"),
         new("指定读取的记录", [785], RegisterDataType.UInt16, string.Empty, ValueTransform.RecordSelector, FormatDescription: "L记录类型/H第几条记录"),
         Number("框架等级", 786, "A"),
-        new("额定电流", [787], RegisterDataType.UInt16, "A", ValueTransform.RatedCurrent,
-            FormatDescription: "按控制器系列和额定电流序值映射"),
+        new("额定电流", [RatedCurrentRegisterAddress], RegisterDataType.UInt16, "A", ValueTransform.RatedCurrent,
+            FormatDescription: "1552.bit0～bit7 按控制器系列映射"),
         Number("总操作次数", 1031, string.Empty),
     ];
 

@@ -200,24 +200,19 @@ public sealed class RegisterParser
         IReadOnlyDictionary<ushort, RawRegisterSample> samples,
         BreakerSeries controllerSeries)
     {
-        if (!samples.TryGetValue(787, out var ordinalSample))
+        if (!samples.TryGetValue(RegisterCatalog.RatedCurrentRegisterAddress, out var ordinalSample))
         {
-            return ($"0x{raw:X}", "缺少额定电流序值", ParseStatus.InvalidData, "未读取到寄存器 787");
+            return ($"0x{raw:X}", "缺少额定电流序值", ParseStatus.InvalidData, "未读取到寄存器 1552");
         }
 
-        if (ordinalSample.Value > byte.MaxValue)
-        {
-            return ($"0x{raw:X}", $"寄存器 787={ordinalSample.Value}", ParseStatus.InvalidData,
-                "额定电流序值超出 byte 范围");
-        }
-
-        var ordinal = (byte)ordinalSample.Value;
+        // 1552 的高 8 位还包含框架等级和保留位，不能把整个 uint16 当作序值。
+        var ordinal = (byte)(ordinalSample.Value & RegisterCatalog.RatedCurrentOrdinalMask);
         var ratio = CurrentRatioRule.Calculate(controllerSeries, ordinal);
         var ratedCurrent = CurrentRatioRule.GetRatedCurrent(controllerSeries, ordinal);
         var value = raw * (decimal)ratio;
         return (
             value.ToString("0", CultureInfo.InvariantCulture),
-            $"{raw} × 电流变比(×{ratio}；{controllerSeries} 序值 {ordinal}={ratedCurrent}A)",
+            $"{raw} × 电流变比(×{ratio}；1552.bit0～bit7={ordinal}；{controllerSeries}={ratedCurrent}A)",
             ParseStatus.Success,
             null);
     }
@@ -226,14 +221,11 @@ public sealed class RegisterParser
         uint raw,
         BreakerSeries controllerSeries)
     {
-        if (raw > byte.MaxValue)
-            return ($"0x{raw:X}", $"寄存器 787={raw}", ParseStatus.InvalidData, "额定电流序值超出 byte 范围");
-
-        var ordinal = (byte)raw;
+        var ordinal = (byte)(raw & RegisterCatalog.RatedCurrentOrdinalMask);
         var ratedCurrent = CurrentRatioRule.GetRatedCurrent(controllerSeries, ordinal);
         return (
             ratedCurrent.ToString(CultureInfo.InvariantCulture),
-            $"{controllerSeries} 额定电流序值 {ordinal} → {ratedCurrent}A",
+            $"1552=0x{raw:X4}；bit0～bit7={ordinal}；{controllerSeries} → {ratedCurrent}A",
             ParseStatus.Success,
             null);
     }
@@ -293,7 +285,7 @@ public sealed class RegisterParser
     }
 
     /// <summary>
-    /// 解析 5.5 表中的事件数据 0。电流事件使用控制器系列和寄存器 787 的额定电流序值计算变比；
+    /// 解析 5.5 表中的事件数据 0。电流事件使用控制器系列和寄存器 1552.bit0～bit7 的额定电流序值计算变比；
     /// 百分比按用户确认后的规则直接显示原值，不再除以 100。
     /// </summary>
     private static (string, string, ParseStatus, string?) DecodeEventData0(

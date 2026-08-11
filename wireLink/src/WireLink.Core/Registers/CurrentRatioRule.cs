@@ -8,7 +8,7 @@ public enum BreakerSeries
 }
 
 /// <summary>
-/// 根据控制器系列和寄存器 787 返回的额定电流序值，
+/// 根据控制器系列和寄存器 1552 的 bit0～bit7 额定电流序值，
 /// 查询额定电流并计算电流变比。
 /// </summary>
 public static class CurrentRatioRule
