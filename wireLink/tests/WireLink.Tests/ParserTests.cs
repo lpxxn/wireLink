@@ -289,8 +289,45 @@ public sealed class ParserTests
         };
         var values=new RegisterParser().Parse(definitions,samples,WordOrder.HighWordFirst,FaultRecordType.StateChange);
         Assert.All(values,value=>Assert.Equal(ParseStatus.Success,value.Status));
+        Assert.Equal("A相 / 本地合闸",values.Single(x=>x.Name=="故障记录相别和类型").Value);
         Assert.Equal("4660",values.Single(x=>x.Name=="故障数据 0").Value);
         Assert.DoesNotContain(values,value=>value.Warning?.Contains("数据结构")==true);
+    }
+
+    [Theory]
+    [InlineData(0,"无变位")]
+    [InlineData(3,"本地合闸")]
+    [InlineData(4,"本地分闸")]
+    [InlineData(5,"故障跳闸")]
+    public void Known_state_change_type_displays_confirmed_description(int typeCode,string description)
+    {
+        var definition=RegisterCatalog.FaultDefinitions.Single(x=>x.Name=="故障记录相别和类型");
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>{{771,Sample(771,(ushort)(typeCode<<8))}},
+            WordOrder.HighWordFirst,
+            FaultRecordType.StateChange).Single();
+
+        Assert.Equal($"A相 / {description}",value.Value);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.Null(value.Warning);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Unconfirmed_state_change_type_keeps_raw_type_code(int typeCode)
+    {
+        var definition=RegisterCatalog.FaultDefinitions.Single(x=>x.Name=="故障记录相别和类型");
+        var value=new RegisterParser().Parse(
+            [definition],
+            new Dictionary<ushort,RawRegisterSample>{{771,Sample(771,(ushort)(typeCode<<8))}},
+            WordOrder.HighWordFirst,
+            FaultRecordType.StateChange).Single();
+
+        Assert.Equal($"A相 / 未知变位类型 {typeCode}",value.Value);
+        Assert.Equal(ParseStatus.ProtocolUnconfirmed,value.Status);
+        Assert.Contains("中文含义尚未确认",value.Warning);
     }
 
     [Fact]

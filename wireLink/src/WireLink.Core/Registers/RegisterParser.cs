@@ -33,7 +33,7 @@ public sealed class RegisterParser
         "无报警", "负载监控一电流报警", "负载监控二报警", "过载预报警", "接地报警",
         "漏电报警", "电流不平衡报警", "需用值溢出报警", "电压不平衡报警", "欠压报警",
         "过压报警", "逆功率报警", "欠频报警", "过频报警", "相序报警", "DI输入报警",
-        "通讯链接失败报警", "自诊断报警", "触头磨损报警", "保留", "保留", "温度报警", "断相报警",
+        "通讯链接失败报警", "自诊断报警", "触头磨损报警", "保留", "保留", "温度报警",
     ];
 
     private readonly IProtocolTrace _trace;
@@ -453,16 +453,30 @@ public sealed class RegisterParser
         if (effectiveType is null && samples.ContainsKey(512))
             return ("无当前故障/报警", "按 512 故障/报警标志判断", ParseStatus.Success, null);
 
+        var stateChangeTypeConfirmed = effectiveType != FaultRecordType.StateChange || typeCode is 0 or 3 or 4 or 5;
         var typeName = effectiveType switch
         {
             FaultRecordType.Fault when typeCode < FaultTypes.Length => FaultTypes[typeCode],
             FaultRecordType.Alarm when typeCode < AlarmTypes.Length => AlarmTypes[typeCode],
-            FaultRecordType.StateChange => $"变位类型 {typeCode}",
+            FaultRecordType.StateChange => typeCode switch
+            {
+                0 => "无变位",
+                3 => "本地合闸",
+                4 => "本地分闸",
+                5 => "故障跳闸",
+                _ => $"未知变位类型 {typeCode}",
+            },
             _ => $"类型码 {typeCode}",
         };
 
-        var status = effectiveType is null ? ParseStatus.ProtocolUnconfirmed : ParseStatus.Success;
-        var warning = status == ParseStatus.Success ? null : "当前没有有效的故障或报警标志";
+        var status = effectiveType is null || !stateChangeTypeConfirmed
+            ? ParseStatus.ProtocolUnconfirmed
+            : ParseStatus.Success;
+        var warning = effectiveType is null
+            ? "当前没有有效的故障或报警标志"
+            : !stateChangeTypeConfirmed
+                ? $"变位类型 {typeCode} 的中文含义尚未确认，保留原始类型码"
+                : null;
         return ($"{phase} / {typeName}", "L=相别，H=类型", status, warning);
     }
 
