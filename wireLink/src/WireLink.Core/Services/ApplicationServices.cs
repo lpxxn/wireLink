@@ -41,7 +41,7 @@ public sealed record AppSettings(
     AppThemeMode Theme = AppThemeMode.System,
     WordOrder WordOrder = WordOrder.HighWordFirst,
     int ReadTimeoutMilliseconds = 1000,
-    int FaultReadyDelayMilliseconds = 100,
+    int FaultReadyDelayMilliseconds = 1000,
     BreakerSeries ControllerSeries = BreakerSeries.BW1);
 
 public interface ISettingsService
