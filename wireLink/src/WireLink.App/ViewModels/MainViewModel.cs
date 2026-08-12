@@ -395,7 +395,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             Merge(
                 FaultRows,
-                result.Values,
+                ForTable(result.Values),
                 result.Errors.Count > 0 ? "本字段读取失败，显示上次成功值" : null);
             _faultReadAt = result.ReadAt;
             _lastReadFaultRecordType = selectedType;
@@ -524,8 +524,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     };
     private static IReadOnlyList<DecodedValue> Flatten(IEnumerable<DataRowViewModel> rows) => rows.SelectMany(r => new[] { r.Left, r.Right }.OfType<DataItemViewModel>()).Select(x => x.Value).ToArray();
     private static IReadOnlyList<DecodedValue> CreatePlaceholders(IEnumerable<RegisterDefinition> definitions) => definitions
+        .Where(definition => definition.ShowInTable)
         .Select(definition => new DecodedValue(definition.Name, definition.Addresses, "—", definition.Unit, "尚未读取", [], ParseStatus.ReadFailed, "尚未读取", DateTimeOffset.MinValue))
         .ToArray();
+    private static IReadOnlyList<DecodedValue> ForTable(IReadOnlyList<DecodedValue> values)
+    {
+        var hidden = RegisterCatalog.FaultDefinitions
+            .Where(definition => !definition.ShowInTable)
+            .Select(definition => definition.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        return hidden.Count == 0 ? values : values.Where(value => !hidden.Contains(value.Name)).ToArray();
+    }
 
     private Task SaveSettingsAsync()
     {

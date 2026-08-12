@@ -97,8 +97,9 @@ public static class RegisterCatalog
         new("软件版本号", [783], RegisterDataType.UInt16, string.Empty, ValueTransform.Multiply, FormatDescription: "协议标注未使用"),
         new("故障记录状态标志", [784], RegisterDataType.UInt16, string.Empty, ValueTransform.FaultRecordStatus, FormatDescription: "见 5.6"),
         new("指定读取的记录", [785], RegisterDataType.UInt16, string.Empty, ValueTransform.RecordSelector, FormatDescription: "L记录类型/H第几条记录"),
+        // 仍读取并解析 1552，供电流事件换算；故障数据表格不单独展示该字段。
         new("额定电流", [RatedCurrentRegisterAddress], RegisterDataType.UInt16, "A", ValueTransform.RatedCurrent,
-            FormatDescription: "1552.bit0～bit7 按控制器系列映射"),
+            FormatDescription: "1552.bit0～bit7 按控制器系列映射", ShowInTable: false),
         Number("总操作次数", 1031, string.Empty),
     ];
 
