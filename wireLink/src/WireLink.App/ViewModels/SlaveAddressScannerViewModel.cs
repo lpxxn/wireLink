@@ -5,6 +5,11 @@ using WireLink.Core.Communication;
 
 namespace WireLink.App.ViewModels;
 
+public sealed record SlaveAddressScanResult(int Address)
+{
+    public string DisplayText => $"地址 {Address}（0x{Address:X2}）可通信";
+}
+
 /// <summary>扫描总线上可通信的 Modbus 从机地址。</summary>
 public sealed class SlaveAddressScannerViewModel : ViewModelBase, IDisposable
 {
@@ -35,7 +40,7 @@ public sealed class SlaveAddressScannerViewModel : ViewModelBase, IDisposable
 
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ScanCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> StopCommand { get; }
-    public ObservableCollection<string> FoundAddresses { get; } = [];
+    public ObservableCollection<SlaveAddressScanResult> FoundAddresses { get; } = [];
 
     public int? FromAddress
     {
@@ -123,7 +128,7 @@ public sealed class SlaveAddressScannerViewModel : ViewModelBase, IDisposable
                 if (await TryProbeAsync((byte)address, token))
                 {
                     found++;
-                    FoundAddresses.Add($"地址 {address}（0x{address:X2}）可通信");
+                    FoundAddresses.Add(new SlaveAddressScanResult(address));
                 }
             }
 
@@ -176,6 +181,14 @@ public sealed class SlaveAddressScannerViewModel : ViewModelBase, IDisposable
         if (!IsScanning) return;
         _scanCancellation?.Cancel();
         Status = "正在停止扫描…";
+    }
+
+    public void UseAddress(SlaveAddressScanResult result)
+    {
+        if (!FoundAddresses.Contains(result)) return;
+
+        _mainViewModel.DeviceAddress = result.Address;
+        StopScan();
     }
 
     private void UpdateConnectionStatus()

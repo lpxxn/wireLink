@@ -71,8 +71,15 @@
         <TextBlock Text="可通信从机" Opacity=".58"/>
         <ListBox Grid.Row="1"
                  ItemsSource="{Binding FoundAddresses}"
+                 DoubleTapped="OnAddressDoubleTapped"
                  FontFamily="Consolas,monospace"
-                 FontSize="15"/>
+                 FontSize="15">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:SlaveAddressScanResult">
+              <TextBlock Text="{Binding DisplayText}"/>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
       </Grid>
     </Border>
   </Grid>
