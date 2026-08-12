@@ -433,6 +433,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             _phaseASeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseA)).ToArray();
             _phaseBSeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseB)).ToArray();
             _phaseCSeries.Values=data.Points.Select(point=>new ObservablePoint(point.TimeMilliseconds,point.PhaseC)).ToArray();
+            FixWaveformYAxis(data);
             WaveformSummary=$"{data.SampleRateHz:0.###} Hz · 每相 {data.Points.Count} 点 · A/B/C RMS：{data.PhaseARms:0.###} / {data.PhaseBRms:0.###} / {data.PhaseCRms:0.###} AD";
             lock (progressStateLock)
             {
@@ -557,6 +558,28 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         GeometrySize=0,
         LineSmoothness=0,
     };
+
+    /// <summary>
+    /// 使用本次完整录波的三相全部采样值固定 Y 轴。相别显隐只改变曲线集合，不再触发自动缩放。
+    /// </summary>
+    private void FixWaveformYAxis(WaveformData data)
+    {
+        var axis=WaveformYAxes[0];
+        if(data.Points.Count==0)
+        {
+            axis.MinLimit=null;
+            axis.MaxLimit=null;
+            return;
+        }
+
+        var maximumAbsoluteValue=data.Points.Max(point=>Math.Max(
+            Math.Abs((int)point.PhaseA),
+            Math.Max(Math.Abs((int)point.PhaseB),Math.Abs((int)point.PhaseC))));
+        var padding=Math.Max(1,(int)Math.Ceiling(maximumAbsoluteValue*0.08));
+        var limit=maximumAbsoluteValue+padding;
+        axis.MinLimit=-limit;
+        axis.MaxLimit=limit;
+    }
 
     private void RefreshWaveformSeries()
     {

@@ -160,6 +160,34 @@ public sealed class MainViewModelTests
         Assert.StartsWith("完整录波读取完成",viewModel.WaveformProgressText);
     }
 
+    [Fact]
+    public async Task Waveform_y_axis_is_fixed_from_all_phases_and_does_not_change_when_phases_are_hidden()
+    {
+        await using var viewModel=CreateViewModel(
+            ["COM10"],
+            new AppSettings(PortName:"COM10"),
+            deviceService:new ConnectedDeviceDataService(),
+            waveformService:new CompletedWaveformDataService());
+
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+        await viewModel.ReadWaveformCommand.Execute().ToTask();
+
+        var axis=Assert.Single(viewModel.WaveformYAxes);
+        Assert.Equal(-4,axis.MinLimit);
+        Assert.Equal(4,axis.MaxLimit);
+
+        viewModel.ShowPhaseB=false;
+        viewModel.ShowPhaseC=false;
+        Assert.Equal(-4,axis.MinLimit);
+        Assert.Equal(4,axis.MaxLimit);
+
+        viewModel.ShowPhaseA=false;
+        viewModel.ShowPhaseC=true;
+        Assert.Equal(-4,axis.MinLimit);
+        Assert.Equal(4,axis.MaxLimit);
+    }
+
     private static MainViewModel CreateViewModel(
         IReadOnlyList<string> ports,
         AppSettings settings,

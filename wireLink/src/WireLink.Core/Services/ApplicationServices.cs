@@ -40,7 +40,7 @@ public sealed record AppSettings(
     int RefreshSeconds = 3,
     AppThemeMode Theme = AppThemeMode.System,
     WordOrder WordOrder = WordOrder.HighWordFirst,
-    int ReadTimeoutMilliseconds = 1000,
+    int ReadTimeoutMilliseconds = 2000,
     int FaultReadyDelayMilliseconds = 1000,
     BreakerSeries ControllerSeries = BreakerSeries.BW1);
 
