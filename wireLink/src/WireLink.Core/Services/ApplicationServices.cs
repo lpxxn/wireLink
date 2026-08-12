@@ -149,7 +149,7 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
 
         try
         {
-            var raw = await client.ReadHoldingRegistersAsync(slaveAddress, 768, 19, cancellationToken);
+            var raw = await client.ReadHoldingRegistersAsync(slaveAddress, 768, 18, cancellationToken);
             foreach (var (value, index) in raw.Select((value, index) => (value, index)))
             {
                 var address = checked((ushort)(768 + index));
@@ -159,7 +159,7 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            errors.Add($"读取故障记录 768～786 失败：{ex.Message}");
+            errors.Add($"读取故障记录 768～785 失败：{ex.Message}");
         }
 
         try

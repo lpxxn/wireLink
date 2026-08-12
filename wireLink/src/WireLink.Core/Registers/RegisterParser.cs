@@ -341,7 +341,14 @@ public sealed class RegisterParser
         if (typeCode is 12 or 13) return ($"{raw * 0.01m:0.00} Hz", $"{raw} × 0.01", ParseStatus.Success, null);
         if (typeCode == 14) return (raw switch { 1 => "ABC", 2 => "ACB", _ => $"未知相序 {raw}" }, "相序代码", raw is 1 or 2 ? ParseStatus.Success : ParseStatus.InvalidData, raw is 1 or 2 ? null : "未知相序代码");
         if (typeCode == 21) return ($"{unchecked((short)raw) * 0.1m:0.0} ℃", $"int16({unchecked((short)raw)}) × 0.1", ParseStatus.Success, null);
-        return ($"0x{raw:X4}", "该报警数据 0 不计算", ParseStatus.ProtocolUnconfirmed, "该报警的数据 0 含义未实现或无意义");
+        var alarmDescription = typeCode < AlarmTypes.Length
+            ? AlarmTypes[typeCode]
+            : $"协议未定义报警类型码 {typeCode}";
+        return (
+            raw.ToString(CultureInfo.InvariantCulture),
+            $"{alarmDescription}；无数据 0 换算规则，十进制原值直接显示",
+            ParseStatus.Success,
+            null);
     }
 
     private static (string, string, ParseStatus, string?) EventCurrent(

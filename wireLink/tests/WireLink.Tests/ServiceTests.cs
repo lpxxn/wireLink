@@ -39,14 +39,14 @@ public sealed class ServiceTests
                 Assert.Equal((ushort)1,count);
                 return [0x0304];
             }
-            Assert.Equal((ushort)768,start); Assert.Equal((ushort)19,count);
+            Assert.Equal((ushort)768,start); Assert.Equal((ushort)18,count);
             var raw=CreateFaultRecord();
             return raw;
         });
         var result=await new FaultRecordService(client,new RegisterParser()).ReadAsync(
             1,FaultRecordType.Fault,3,WordOrder.HighWordFirst,BreakerSeries.BW1,TimeSpan.Zero);
         Assert.Equal(((ushort)785,(ushort)0x0300),client.LastWrite);
-        Assert.Empty(result.Errors); Assert.Equal(17,result.Values.Count);
+        Assert.Empty(result.Errors); Assert.Equal(16,result.Values.Count);
         Assert.Equal("2026-07-22 14:30:09",
             result.Values.Single(x=>x.Name=="故障记录时间").Value);
         Assert.Equal("630 A",result.Values.Single(x=>x.Name=="额定电流").DisplayValue);
@@ -87,7 +87,7 @@ public sealed class ServiceTests
             1,FaultRecordType.Fault,0,WordOrder.HighWordFirst,BreakerSeries.BW1,TimeSpan.Zero);
 
         Assert.Single(result.Errors);
-        Assert.Contains("768～786",result.Errors[0]);
+        Assert.Contains("768～785",result.Errors[0]);
         Assert.Equal(2,result.Values.Count);
         Assert.Equal("630 A",result.Values.Single(x=>x.Name=="额定电流").DisplayValue);
         Assert.Equal("128",result.Values.Single(x=>x.Name=="总操作次数").Value);
@@ -181,10 +181,10 @@ public sealed class ServiceTests
 
     private static ushort[] CreateFaultRecord()
     {
-        var raw=new ushort[19];
+        var raw=new ushort[18];
         raw[0]=0x2607; raw[1]=0x2214; raw[2]=0x3009; raw[3]=0x0700;
         raw[12]=0x2607; raw[13]=0x2208; raw[14]=0x1500; raw[16]=0x0444;
-        raw[17]=0x0300; raw[18]=1600;
+        raw[17]=0x0300;
         return raw;
     }
 

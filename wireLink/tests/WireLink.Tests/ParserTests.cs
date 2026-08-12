@@ -184,6 +184,25 @@ public sealed class ParserTests
     }
 
     [Fact]
+    public void Historical_alarm_with_undefined_type_displays_data_zero_as_decimal_raw_value()
+    {
+        var definition=RegisterCatalog.FaultDefinitions.Single(x=>x.Name=="故障数据 0");
+        var samples=new Dictionary<ushort,RawRegisterSample>
+        {
+            {771,Sample(771,0x1601)},
+            {772,Sample(772,0x00C8)},
+        };
+
+        var value=new RegisterParser().Parse(
+            [definition],samples,WordOrder.HighWordFirst,FaultRecordType.Alarm).Single();
+
+        Assert.Equal("200",value.Value);
+        Assert.Contains("协议未定义报警类型码 22",value.Formula);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.Null(value.Warning);
+    }
+
+    [Fact]
     public void Fault_additional_data_displays_decimal_raw_value_without_warning()
     {
         var definition=RegisterCatalog.DeviceDefinitions.Single(x=>x.Addresses.Contains((ushort)517));

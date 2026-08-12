@@ -32,7 +32,6 @@ public static class RegisterCatalog
         new(352, 2),
         new(354, 2),
         new(356, 2),
-        new(432, 2),
         new(512, 1),
         // 当前报警在协议中的逻辑顺序为 [514,513]，通信时读取连续地址 513～514。
         new(513, 2),
@@ -66,7 +65,6 @@ public static class RegisterCatalog
         UInt32("高精度电压测量 Uan", 352, 353, "V", 0.1m),
         UInt32("高精度电压测量 Ubn", 354, 355, "V", 0.1m),
         UInt32("高精度电压测量 Ucn", 356, 357, "V", 0.1m),
-        UInt32("总有功电能", 432, 433, "kWh", 0.001m),
         new("运行状态", [512], RegisterDataType.UInt16, string.Empty, ValueTransform.RunStatus, FormatDescription: "见 5.2"),
         // 协议表按 514、513 的顺序定义当前报警；前者为高 16 位，后者为低 16 位，不能按地址重新排序。
         new("当前报警", [514, 513], RegisterDataType.UInt32, string.Empty, ValueTransform.AlarmBits, FormatDescription: "见 5.3"),
@@ -99,7 +97,6 @@ public static class RegisterCatalog
         new("软件版本号", [783], RegisterDataType.UInt16, string.Empty, ValueTransform.Multiply, FormatDescription: "协议标注未使用"),
         new("故障记录状态标志", [784], RegisterDataType.UInt16, string.Empty, ValueTransform.FaultRecordStatus, FormatDescription: "见 5.6"),
         new("指定读取的记录", [785], RegisterDataType.UInt16, string.Empty, ValueTransform.RecordSelector, FormatDescription: "L记录类型/H第几条记录"),
-        Number("框架等级", 786, "A"),
         new("额定电流", [RatedCurrentRegisterAddress], RegisterDataType.UInt16, "A", ValueTransform.RatedCurrent,
             FormatDescription: "1552.bit0～bit7 按控制器系列映射"),
         Number("总操作次数", 1031, string.Empty),
