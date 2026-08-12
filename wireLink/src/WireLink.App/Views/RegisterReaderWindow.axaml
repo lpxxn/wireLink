@@ -7,7 +7,7 @@
         Height="480"
         MinWidth="500"
         MinHeight="420"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
         Icon="/Assets/wirelink-icon.png"
         Title="寄存器读取">
   <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="20">

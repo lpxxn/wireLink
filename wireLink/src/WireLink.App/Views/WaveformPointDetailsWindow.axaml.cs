@@ -64,6 +64,6 @@ public partial class WaveformPointDetailsWindow : Window
 
         _rawChartWindow = new WaveformRawChartWindow(new WaveformRawChartViewModel(data));
         _rawChartWindow.Closed += (_, _) => _rawChartWindow = null;
-        _rawChartWindow.Show(this);
+        _rawChartWindow.Show();
     }
 }

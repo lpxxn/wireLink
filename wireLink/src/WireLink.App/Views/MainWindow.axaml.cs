@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
 using WireLink.App.ViewModels;
@@ -102,7 +103,7 @@ public partial class MainWindow : Window
     {
         if (_logStore is null) return;
         if (_logWindow is { } existing) { existing.Activate(); return; }
-        _logWindow = new LogWindow(_logStore); _logWindow.Closed += (_, _) => _logWindow = null; _logWindow.Show(this);
+        _logWindow = new LogWindow(_logStore); _logWindow.Closed += (_, _) => _logWindow = null; _logWindow.Show();
     }
 
     private void ShowRegisterReaderWindow()
@@ -111,7 +112,7 @@ public partial class MainWindow : Window
         if (_registerReaderWindow is { } existing) { existing.Activate(); return; }
         _registerReaderWindow = new RegisterReaderWindow(new RegisterReaderViewModel(_client, mainViewModel));
         _registerReaderWindow.Closed += (_, _) => _registerReaderWindow = null;
-        _registerReaderWindow.Show(this);
+        _registerReaderWindow.Show();
     }
 
     private void ShowWaveformPointDetailsWindow()
@@ -128,7 +129,7 @@ public partial class MainWindow : Window
             new WaveformPointDetailsViewModel(mainViewModel.CurrentWaveformData),
             _export);
         _waveformPointDetailsWindow.Closed += (_, _) => _waveformPointDetailsWindow = null;
-        _waveformPointDetailsWindow.Show(this);
+        _waveformPointDetailsWindow.Show();
     }
 
     private void ShowSlaveAddressScannerWindow()
@@ -138,7 +139,18 @@ public partial class MainWindow : Window
         _slaveAddressScannerWindow = new SlaveAddressScannerWindow(
             new SlaveAddressScannerViewModel(_client, mainViewModel));
         _slaveAddressScannerWindow.Closed += (_, _) => _slaveAddressScannerWindow = null;
-        _slaveAddressScannerWindow.Show(this);
+        _slaveAddressScannerWindow.Show();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            foreach (var window in desktop.Windows.Where(window => window != this).ToArray())
+                window.Close();
+        }
+
+        base.OnClosed(e);
     }
 
     private async void OnExportRequested(object? sender, ExportRequest request)

@@ -7,7 +7,7 @@
         Height="720"
         MinWidth="900"
         MinHeight="520"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
         Icon="/Assets/wirelink-icon.png"
         Title="录波原始点明细">
   <Window.Styles>

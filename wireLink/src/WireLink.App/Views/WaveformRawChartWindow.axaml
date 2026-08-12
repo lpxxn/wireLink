@@ -8,7 +8,7 @@
         Height="720"
         MinWidth="760"
         MinHeight="500"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
         Icon="/Assets/wirelink-icon.png"
         Title="录波未转换原始值曲线">
   <Grid Margin="20" RowDefinitions="Auto,Auto,*" RowSpacing="12">

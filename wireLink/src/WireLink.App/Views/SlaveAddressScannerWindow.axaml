@@ -7,7 +7,7 @@
         Height="520"
         MinWidth="460"
         MinHeight="420"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
         Icon="/Assets/wirelink-icon.png"
         Title="从机地址扫描">
   <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="18">
