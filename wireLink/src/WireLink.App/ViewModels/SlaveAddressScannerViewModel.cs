@@ -188,7 +188,6 @@ public sealed class SlaveAddressScannerViewModel : ViewModelBase, IDisposable
         if (!FoundAddresses.Contains(result)) return;
 
         _mainViewModel.DeviceAddress = result.Address;
-        StopScan();
     }
 
     private void UpdateConnectionStatus()

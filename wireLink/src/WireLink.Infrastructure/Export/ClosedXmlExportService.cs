@@ -22,7 +22,7 @@ public sealed class ClosedXmlExportService : IExcelExportService
         if (context.RecordType is not null)
         {
             sheet.Cell(row, 3).Value = "记录";
-            sheet.Cell(row, 4).Value = $"{context.RecordType} / 第 {context.RecordIndex} 条记录";
+            sheet.Cell(row, 4).Value = $"{DescribeFaultRecordType(context.RecordType.Value)} / 第 {context.RecordIndex} 条记录";
         }
         row += 2;
         foreach (var (column, value) in new[] { (1, "名称"), (2, "计算值"), (3, "名称"), (4, "计算值") })
@@ -39,6 +39,14 @@ public sealed class ClosedXmlExportService : IExcelExportService
         workbook.SaveAs(path);
         return Task.CompletedTask;
     }
+
+    private static string DescribeFaultRecordType(FaultRecordType type) => type switch
+    {
+        FaultRecordType.Fault => "故障",
+        FaultRecordType.Alarm => "报警",
+        FaultRecordType.StateChange => "变位",
+        _ => type.ToString(),
+    };
 
     /// <summary>导出可直接分析的三相对齐表，以及保留分段、相别和源地址的读取明细表。</summary>
     public Task ExportAsync(

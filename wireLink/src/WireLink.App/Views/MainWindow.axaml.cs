@@ -132,14 +132,14 @@ public partial class MainWindow : Window
         _waveformPointDetailsWindow.Show();
     }
 
-    private void ShowSlaveAddressScannerWindow()
+    private async void ShowSlaveAddressScannerWindow()
     {
         if (_client is null || DataContext is not MainViewModel mainViewModel) return;
         if (_slaveAddressScannerWindow is { } existing) { existing.Activate(); return; }
         _slaveAddressScannerWindow = new SlaveAddressScannerWindow(
             new SlaveAddressScannerViewModel(_client, mainViewModel));
         _slaveAddressScannerWindow.Closed += (_, _) => _slaveAddressScannerWindow = null;
-        _slaveAddressScannerWindow.Show();
+        await _slaveAddressScannerWindow.ShowDialog(this);
     }
 
     protected override void OnClosed(EventArgs e)

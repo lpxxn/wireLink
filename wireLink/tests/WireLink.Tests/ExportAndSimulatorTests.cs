@@ -38,6 +38,25 @@ public sealed class ExportAndSimulatorTests
         finally { if(File.Exists(path))File.Delete(path); }
     }
 
+    [Theory]
+    [InlineData(FaultRecordType.Fault, "故障 / 第 1 条记录")]
+    [InlineData(FaultRecordType.Alarm, "报警 / 第 1 条记录")]
+    [InlineData(FaultRecordType.StateChange, "变位 / 第 1 条记录")]
+    public async Task Fault_excel_uses_chinese_record_type(FaultRecordType recordType, string expected)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"wirelink-{Guid.NewGuid():N}.xlsx");
+        try
+        {
+            await new ClosedXmlExportService().ExportAsync(
+                path,
+                new ExcelExportContext("故障数据", [], DateTimeOffset.Now, recordType, 1));
+
+            using var book = new XLWorkbook(path);
+            Assert.Equal(expected, book.Worksheet(1).Cell(2, 4).GetString());
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
     [Fact]
     public void Simulator_supports_03_and_06_with_crc()
     {
