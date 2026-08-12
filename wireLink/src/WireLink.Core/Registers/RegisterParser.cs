@@ -33,7 +33,7 @@ public sealed class RegisterParser
         "无报警", "负载监控一电流报警", "负载监控二报警", "过载预报警", "接地报警",
         "漏电报警", "电流不平衡报警", "需用值溢出报警", "电压不平衡报警", "欠压报警",
         "过压报警", "逆功率报警", "欠频报警", "过频报警", "相序报警", "DI输入报警",
-        "通讯链接失败报警", "自诊断报警", "触头磨损报警", "保留", "保留", "温度报警",
+        "通讯链接失败报警", "自诊断报警", "触头磨损报警", "保留", "保留", "温度报警", "断相报警"
     ];
 
     private readonly IProtocolTrace _trace;
@@ -335,7 +335,7 @@ public sealed class RegisterParser
     {
         if (typeCode is 1 or 2 or 3 or 4 or 7) return EventCurrent(raw, samples, controllerSeries);
         if (typeCode == 5) return ($"{raw * 0.01m:0.00} A", $"{raw} × 0.01（漏电）", ParseStatus.Success, null);
-        if (typeCode is 6 or 8) return ($"{raw}%", "百分比原值直接显示", ParseStatus.Success, null);
+        if (typeCode is 6 or 8 or 22) return ($"{raw}%", "百分比原值直接显示", ParseStatus.Success, null);
         if (typeCode is 9 or 10) return ($"{raw} V", "原值 × 1", ParseStatus.Success, null);
         if (typeCode == 11) return ($"{unchecked((short)raw)} kW", "按 int16 有符号值 × 1", ParseStatus.Success, null);
         if (typeCode is 12 or 13) return ($"{raw * 0.01m:0.00} Hz", $"{raw} × 0.01", ParseStatus.Success, null);
