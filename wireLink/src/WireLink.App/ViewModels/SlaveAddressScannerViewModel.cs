@@ -18,7 +18,7 @@ public sealed class SlaveAddressScannerViewModel : ViewModelBase, IDisposable
     private readonly MainViewModel _mainViewModel;
     private CancellationTokenSource? _scanCancellation;
     private int? _fromAddress = 1;
-    private int? _toAddress = 32;
+    private int? _toAddress = 10;
     private bool _isScanning;
     private string _status = "请先打开串口，再扫描从机地址";
     private string _progressText = "";

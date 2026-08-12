@@ -283,7 +283,7 @@
                 <TextBlock Grid.Column="1" Text="秒" VerticalAlignment="Center" Opacity=".72"/>
                 <CheckBox Grid.Column="2"
                           IsChecked="{Binding AutoRefresh}"
-                          IsEnabled="{Binding CanRead}"
+                          IsEnabled="{Binding CanAutoRefresh}"
                           Content="自动刷新"
                           VerticalAlignment="Center"
                           Margin="4,0,0,0"/>
@@ -427,7 +427,7 @@
                 <Button Grid.Column="4"
                         Classes="secondary"
                         Command="{Binding ReadFaultCommand}"
-                        IsEnabled="{Binding CanRead}"
+                        IsEnabled="{Binding CanReadFault}"
                         Content="立即读取"/>
                 <Button Grid.Column="5"
                         Classes="primary"

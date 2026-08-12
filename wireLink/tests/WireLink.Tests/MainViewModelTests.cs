@@ -35,6 +35,78 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task Empty_timeout_disables_opening_serial_until_a_value_is_entered_again()
+    {
+        await using var viewModel=CreateViewModel(["COM11"],new AppSettings(PortName:"COM11"));
+
+        viewModel.ReadTimeoutMilliseconds=null;
+
+        Assert.Null(viewModel.ReadTimeoutMilliseconds);
+        Assert.False(viewModel.CanToggleSerial);
+
+        viewModel.ReadTimeoutMilliseconds=1200;
+
+        Assert.True(viewModel.CanToggleSerial);
+    }
+
+    [Fact]
+    public async Task Empty_main_numeric_fields_disable_only_the_operations_that_need_them()
+    {
+        await using var viewModel=CreateViewModel(
+            ["COM10"],
+            new AppSettings(PortName:"COM10"),
+            deviceService:new ConnectedDeviceDataService());
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+
+        Assert.True(viewModel.CanRead);
+        Assert.True(viewModel.CanAutoRefresh);
+        Assert.True(viewModel.CanReadFault);
+
+        viewModel.RefreshSeconds=null;
+        Assert.Null(viewModel.RefreshSeconds);
+        Assert.False(viewModel.CanAutoRefresh);
+        Assert.True(viewModel.CanRead);
+
+        viewModel.FaultRecordIndex=null;
+        Assert.Null(viewModel.FaultRecordIndex);
+        Assert.False(viewModel.CanReadFault);
+        Assert.True(viewModel.CanRead);
+
+        viewModel.FaultRecordIndex=0;
+        viewModel.FaultDelayMilliseconds=null;
+        Assert.Null(viewModel.FaultDelayMilliseconds);
+        Assert.False(viewModel.CanReadFault);
+
+        viewModel.RefreshSeconds=3;
+        viewModel.FaultDelayMilliseconds=100;
+        Assert.True(viewModel.CanAutoRefresh);
+        Assert.True(viewModel.CanReadFault);
+    }
+
+    [Fact]
+    public async Task Empty_device_address_disables_connection_and_read_operations()
+    {
+        await using var viewModel=CreateViewModel(
+            ["COM10"],
+            new AppSettings(PortName:"COM10"),
+            deviceService:new ConnectedDeviceDataService());
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+        Assert.True(viewModel.IsDeviceConnected);
+
+        viewModel.DeviceAddress=null;
+
+        Assert.False(viewModel.IsDeviceConnected);
+        Assert.False(viewModel.CanTest);
+        Assert.False(viewModel.CanRead);
+
+        viewModel.DeviceAddress=1;
+        Assert.True(viewModel.CanTest);
+        Assert.False(viewModel.CanRead);
+    }
+
+    [Fact]
     public async Task Open_failure_is_exposed_as_a_friendly_visible_notice()
     {
         var trace=new RecordingProtocolTrace();

@@ -30,9 +30,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _portName;
     private int _baudRate;
     private int? _deviceAddress;
-    private int _refreshSeconds;
-    private int _readTimeoutMilliseconds;
-    private int _faultDelayMilliseconds;
+    private int? _refreshSeconds;
+    private int? _readTimeoutMilliseconds;
+    private int? _faultDelayMilliseconds;
     private bool _isSerialOpen;
     private bool _isDeviceConnected;
     private bool _isBusy;
@@ -43,7 +43,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private AppThemeMode _theme;
     private string _controllerName;
     private FaultRecordTypeOption _selectedFaultRecordType;
-    private int _faultRecordIndex;
+    private int? _faultRecordIndex = 0;
     private DateTimeOffset _deviceReadAt;
     private DateTimeOffset _faultReadAt;
     private FaultRecordType _lastReadFaultRecordType;
@@ -151,16 +151,64 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         set
         {
             int? address=value is null ? null : Math.Clamp(value.Value,1,255);
+            if(_deviceAddress==address) return;
             this.RaiseAndSetIfChanged(ref _deviceAddress,address);
-            if(address is not null) SetAddressRequired(false);
+            SetAddressRequired(false);
+            if(IsDeviceConnected)
+            {
+                AutoRefresh=false;
+                IsDeviceConnected=false;
+            }
+            RaiseState();
         }
     }
     public string AddressHint => _showAddressRequired ? "设备地址不能为空" : "Modbus 从机地址（1～255）";
     public IBrush AddressHintBrush => _showAddressRequired ? Brushes.IndianRed : Brushes.Gray;
-    public int RefreshSeconds { get=>_refreshSeconds; set=>this.RaiseAndSetIfChanged(ref _refreshSeconds,Math.Clamp(value,1,3600)); }
-    public int ReadTimeoutMilliseconds { get=>_readTimeoutMilliseconds; set=>this.RaiseAndSetIfChanged(ref _readTimeoutMilliseconds,Math.Clamp(value,100,10000)); }
-    public int FaultDelayMilliseconds { get=>_faultDelayMilliseconds; set=>this.RaiseAndSetIfChanged(ref _faultDelayMilliseconds,Math.Clamp(value,0,2000)); }
-    public int FaultRecordIndex { get=>_faultRecordIndex; set=>this.RaiseAndSetIfChanged(ref _faultRecordIndex,Math.Clamp(value,0,15)); }
+    public int? RefreshSeconds
+    {
+        get=>_refreshSeconds;
+        set
+        {
+            int? normalized=value is null ? null : Math.Clamp(value.Value,1,3600);
+            if(_refreshSeconds==normalized) return;
+            this.RaiseAndSetIfChanged(ref _refreshSeconds,normalized);
+            if(normalized is null && AutoRefresh) AutoRefresh=false;
+            RaiseState();
+        }
+    }
+    public int? ReadTimeoutMilliseconds
+    {
+        get=>_readTimeoutMilliseconds;
+        set
+        {
+            int? normalized=value is null ? null : Math.Clamp(value.Value,100,10000);
+            if(_readTimeoutMilliseconds==normalized) return;
+            this.RaiseAndSetIfChanged(ref _readTimeoutMilliseconds,normalized);
+            RaiseState();
+        }
+    }
+    public int? FaultDelayMilliseconds
+    {
+        get=>_faultDelayMilliseconds;
+        set
+        {
+            int? normalized=value is null ? null : Math.Clamp(value.Value,0,2000);
+            if(_faultDelayMilliseconds==normalized) return;
+            this.RaiseAndSetIfChanged(ref _faultDelayMilliseconds,normalized);
+            RaiseState();
+        }
+    }
+    public int? FaultRecordIndex
+    {
+        get=>_faultRecordIndex;
+        set
+        {
+            int? normalized=value is null ? null : Math.Clamp(value.Value,0,15);
+            if(_faultRecordIndex==normalized) return;
+            this.RaiseAndSetIfChanged(ref _faultRecordIndex,normalized);
+            RaiseState();
+        }
+    }
     public FaultRecordTypeOption SelectedFaultRecordType
     {
         get=>_selectedFaultRecordType;
@@ -177,7 +225,16 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool IsSerialOpen { get=>_isSerialOpen; private set { this.RaiseAndSetIfChanged(ref _isSerialOpen,value); RaiseState(); } }
     public bool IsDeviceConnected { get=>_isDeviceConnected; private set { this.RaiseAndSetIfChanged(ref _isDeviceConnected,value); RaiseState(); } }
     public bool IsBusy { get=>_isBusy; private set { this.RaiseAndSetIfChanged(ref _isBusy,value); RaiseState(); } }
-    public bool AutoRefresh { get=>_autoRefresh; set { this.RaiseAndSetIfChanged(ref _autoRefresh,value); RestartAutoRefresh(); } }
+    public bool AutoRefresh
+    {
+        get=>_autoRefresh;
+        set
+        {
+            var enabled=value && CanAutoRefresh;
+            this.RaiseAndSetIfChanged(ref _autoRefresh,enabled);
+            RestartAutoRefresh();
+        }
+    }
     public string Notice { get=>_notice; private set=>this.RaiseAndSetIfChanged(ref _notice,value); }
     public string SerialButtonText => IsSerialOpen ? "关闭串口" : "打开串口";
     public string SerialStatusText => IsSerialOpen ? "串口已打开" : "串口未打开";
@@ -185,9 +242,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public IBrush SerialStatusBrush => IsSerialOpen ? Brushes.MediumSeaGreen : Brushes.IndianRed;
     public IBrush DeviceStatusBrush => IsDeviceConnected ? Brushes.MediumSeaGreen : Brushes.Gray;
     public bool CanConfigureSerial => !IsSerialOpen && !IsBusy;
-    public bool CanToggleSerial => !IsBusy && (IsSerialOpen || !string.IsNullOrWhiteSpace(PortName));
-    public bool CanTest => IsSerialOpen && !IsBusy;
-    public bool CanRead => IsDeviceConnected && !IsBusy;
+    public bool CanToggleSerial => !IsBusy && (IsSerialOpen ||
+        (!string.IsNullOrWhiteSpace(PortName) && ReadTimeoutMilliseconds is not null));
+    public bool CanTest => IsSerialOpen && !IsBusy && DeviceAddress is not null;
+    public bool CanRead => IsDeviceConnected && !IsBusy && DeviceAddress is not null;
+    public bool CanAutoRefresh => CanRead && RefreshSeconds is not null;
+    public bool CanReadFault => CanRead && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
     public bool CanExportDevice => _deviceReadAt!=default && IsDeviceConnected && !IsBusy;
     public bool CanExportFault => _faultReadAt!=default && IsDeviceConnected && !IsBusy;
     public bool CanExportWaveform => _waveformData is not null && IsDeviceConnected && !IsBusy;
@@ -255,6 +315,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         if(IsBusy) return;
         if(IsSerialOpen) { await CloseSerialAsync(); return; }
+        if(ReadTimeoutMilliseconds is not int readTimeoutMilliseconds) return;
         if(string.IsNullOrWhiteSpace(PortName))
         {
             Notice="请输入或选择串口";
@@ -263,7 +324,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await RunBusyAsync(async token =>
         {
             await _client.OpenAsync(new SerialConnectionOptions(PortName,BaudRate,
-                TimeSpan.FromMilliseconds(ReadTimeoutMilliseconds),TimeSpan.FromMilliseconds(ReadTimeoutMilliseconds)),token);
+                TimeSpan.FromMilliseconds(readTimeoutMilliseconds),TimeSpan.FromMilliseconds(readTimeoutMilliseconds)),token);
             IsSerialOpen=true; IsDeviceConnected=false; Notice=$"已打开 {PortName}"; await SaveSettingsAsync();
         },"打开串口失败",showErrorDialog:true);
     }
@@ -320,15 +381,15 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task ReadFaultAsync()
     {
-        if(!CanRead) return;
-        if(DeviceAddress is not int address) return;
+        if(!CanReadFault || DeviceAddress is not int address ||
+           FaultRecordIndex is not int faultRecordIndex || FaultDelayMilliseconds is not int faultDelayMilliseconds) return;
         await RunBusyAsync(async token =>
         {
             var selectedType=SelectedFaultRecordType.Value;
-            var selectedIndex=(byte)FaultRecordIndex;
+            var selectedIndex=(byte)faultRecordIndex;
             var result=await _faultService.ReadAsync((byte)address,selectedType,selectedIndex,
                 WordOrder.HighWordFirst,SelectedControllerSeries,
-                TimeSpan.FromMilliseconds(FaultDelayMilliseconds),token);
+                TimeSpan.FromMilliseconds(faultDelayMilliseconds),token);
             if(!result.HasData)
                 throw new ModbusProtocolException(result.Errors.FirstOrDefault() ?? "没有读取到故障数据");
 
@@ -429,13 +490,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private void RestartAutoRefresh()
     {
         _autoRefreshCancellation?.Cancel(); _autoRefreshCancellation?.Dispose(); _autoRefreshCancellation=null;
-        if(!AutoRefresh || !IsDeviceConnected) return;
+        if(!AutoRefresh || !CanAutoRefresh || RefreshSeconds is not int refreshSeconds) return;
         _autoRefreshCancellation=new CancellationTokenSource(); var token=_autoRefreshCancellation.Token;
         _=Task.Run(async()=>
         {
             while(!token.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromSeconds(RefreshSeconds),token);
+                await Task.Delay(TimeSpan.FromSeconds(refreshSeconds),token);
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(ReadDeviceAsync);
             }
         },token);
@@ -465,9 +526,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         .Select(definition=>new DecodedValue(definition.Name,definition.Addresses,"—",definition.Unit,"尚未读取",[],ParseStatus.ReadFailed,"尚未读取",DateTimeOffset.MinValue))
         .ToArray();
 
-    private Task SaveSettingsAsync()=>_settingsService.SaveAsync(new AppSettings(
-        PortName,BaudRate,(byte)(DeviceAddress ?? 1),RefreshSeconds,Theme,WordOrder.HighWordFirst,
-        ReadTimeoutMilliseconds,FaultDelayMilliseconds,SelectedControllerSeries));
+    private Task SaveSettingsAsync()
+    {
+        if(DeviceAddress is not int deviceAddress || RefreshSeconds is not int refreshSeconds ||
+           ReadTimeoutMilliseconds is not int readTimeoutMilliseconds ||
+           FaultDelayMilliseconds is not int faultDelayMilliseconds)
+            return Task.CompletedTask;
+
+        return _settingsService.SaveAsync(new AppSettings(
+            PortName,BaudRate,(byte)deviceAddress,refreshSeconds,Theme,WordOrder.HighWordFirst,
+            readTimeoutMilliseconds,faultDelayMilliseconds,SelectedControllerSeries));
+    }
     private void SetAddressRequired(bool value)
     {
         if(_showAddressRequired==value) return;
@@ -477,7 +546,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
     private void RaiseState()
     {
-        foreach(var name in new[]{nameof(SerialButtonText),nameof(SerialStatusText),nameof(DeviceStatusText),nameof(SerialStatusBrush),nameof(DeviceStatusBrush),nameof(CanConfigureSerial),nameof(CanToggleSerial),nameof(CanTest),nameof(CanRead),nameof(CanExportDevice),nameof(CanExportFault),nameof(CanExportWaveform)}) this.RaisePropertyChanged(name);
+        foreach(var name in new[]{nameof(SerialButtonText),nameof(SerialStatusText),nameof(DeviceStatusText),nameof(SerialStatusBrush),nameof(DeviceStatusBrush),nameof(CanConfigureSerial),nameof(CanToggleSerial),nameof(CanTest),nameof(CanRead),nameof(CanAutoRefresh),nameof(CanReadFault),nameof(CanExportDevice),nameof(CanExportFault),nameof(CanExportWaveform)}) this.RaisePropertyChanged(name);
     }
 
     private static LineSeries<ObservablePoint> CreateWaveformSeries(string name)=>new()
