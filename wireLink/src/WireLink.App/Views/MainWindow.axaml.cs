@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using WireLink.App.ViewModels;
 using WireLink.Core.Communication;
@@ -48,7 +49,7 @@ public partial class MainWindow : Window
         var dialog = new ErrorDialogWindow(request);
         await dialog.ShowDialog(this);
     }
-    private void OnDeviceInfoHeaderPressed(object? sender, PointerPressedEventArgs e)
+    private void OnDeviceInfoScanClick(object? sender, RoutedEventArgs e)
     {
         ShowSlaveAddressScannerWindow();
         e.Handled = true;

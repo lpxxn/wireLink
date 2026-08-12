@@ -120,6 +120,30 @@
       <Setter Property="Background" Value="#F0F3F9"/>
       <Setter Property="Foreground" Value="#A4AEC0"/>
     </Style>
+    <Style Selector="Button.scan-action">
+      <Setter Property="MinHeight" Value="30"/>
+      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#3159D5"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="7"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.scan-action:pointerover">
+      <Setter Property="Background" Value="#EEF3FF"/>
+      <Setter Property="Foreground" Value="#274FCB"/>
+    </Style>
+    <Style Selector="Button.scan-action:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#EEF3FF"/>
+      <Setter Property="Foreground" Value="#274FCB"/>
+    </Style>
+    <Style Selector="Button.scan-action:pressed">
+      <Setter Property="Background" Value="#E4ECFF"/>
+    </Style>
+    <Style Selector="Button.scan-action:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="#E4ECFF"/>
+    </Style>
     <Style Selector="TabItem">
       <Setter Property="FontSize" Value="15"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
@@ -198,18 +222,26 @@
 
             <Border Height="1" Background="#E7EAF0" Margin="0,2"/>
 
-            <Grid ColumnDefinitions="Auto,*"
-                  ColumnSpacing="11"
-                  Cursor="Hand"
-                  ToolTip.Tip="点击打开从机地址扫描（Shift+F10）"
-                  PointerPressed="OnDeviceInfoHeaderPressed">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="11">
               <Border Classes="icon-tile">
-                <TextBlock Text="▣" Foreground="#3D67E8" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <TextBlock Text="⌕"
+                           Foreground="#3D67E8"
+                           FontSize="22"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
               </Border>
               <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                 <TextBlock Classes="section-title" Text="设备信息"/>
-                <TextBlock Classes="caption" Text="设置 Modbus 从机地址"/>
+                <TextBlock Classes="caption" Text="Modbus 从机地址"/>
               </StackPanel>
+              <Button Grid.Column="2"
+                      Classes="scan-action"
+                      Content="扫描地址 ›"
+                      Click="OnDeviceInfoScanClick"
+                      ToolTip.Tip="打开从机地址扫描窗口（Shift+F10）"
+                      AutomationProperties.Name="扫描 Modbus 从机地址"
+                      VerticalAlignment="Center"/>
             </Grid>
 
             <StackPanel Spacing="8">
