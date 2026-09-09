@@ -50,17 +50,63 @@ public sealed class SerilogProtocolTrace(ILogger logger) : IProtocolTrace
     public void Error(string message, Exception? exception = null) => logger.Error(exception, "{ProtocolMessage}", message);
 }
 
+public sealed class ConsoleLogSink : ILogEventSink
+{
+    public void Emit(LogEvent logEvent)
+    {
+        try
+        {
+            var writer = logEvent.Level >= LogEventLevel.Error ? Console.Error : Console.Out;
+            writer.WriteLine($"{logEvent.Timestamp:HH:mm:ss.fff} [{logEvent.Level.ToString()[..3].ToUpperInvariant()}] {logEvent.RenderMessage()}");
+            if (logEvent.Exception is { } exception)
+                writer.WriteLine(exception);
+        }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
+    }
+}
+
 public static class AppLogging
 {
+    public static string LogDirectory { get; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WireLink", "logs");
+
+    public static void WriteCrash(Exception exception)
+    {
+        // 最后的崩溃兜底路径，任何记录失败都不能覆盖原始异常。
+        try
+        {
+            Directory.CreateDirectory(LogDirectory);
+            File.AppendAllText(
+                Path.Combine(LogDirectory, "crash.log"),
+                $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz}" +
+                $"{Environment.NewLine}{exception}" +
+                $"{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch
+        {
+            // 文件目录无权限、路径非法、磁盘故障等情况下继续尝试控制台。
+        }
+
+        try
+        {
+            Console.Error.WriteLine(exception);
+        }
+        catch
+        {
+            // Release/WinExe 没有控制台或输出流已关闭时忽略。
+        }
+    }
+
     public static (ILogger Logger, InMemoryLogStore Store) Create()
     {
-        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WireLink", "logs");
-        Directory.CreateDirectory(directory);
-        var store = new InMemoryLogStore(directory);
+        Directory.CreateDirectory(LogDirectory);
+        var store = new InMemoryLogStore(LogDirectory);
         var logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .WriteTo.Sink(new LogStoreSink(store))
-            .WriteTo.File(Path.Combine(directory, "wirelink-.log"), rollingInterval: RollingInterval.Day,
+            .WriteTo.Sink(new ConsoleLogSink())
+            .WriteTo.File(Path.Combine(LogDirectory, "wirelink-.log"), rollingInterval: RollingInterval.Day,
                 fileSizeLimitBytes: 10 * 1024 * 1024, rollOnFileSizeLimit: true, retainedFileCountLimit: 14,
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
