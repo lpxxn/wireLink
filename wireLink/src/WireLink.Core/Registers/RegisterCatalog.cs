@@ -68,15 +68,15 @@ public static class RegisterCatalog
         new("运行状态", [512], RegisterDataType.UInt16, string.Empty, ValueTransform.RunStatus, FormatDescription: "见 5.2"),
         // 协议表按 514、513 的顺序定义当前报警；前者为高 16 位，后者为低 16 位，不能按地址重新排序。
         new("当前报警", [514, 513], RegisterDataType.UInt32, string.Empty, ValueTransform.AlarmBits, FormatDescription: "见 5.3"),
-        new("当前故障/报警相别和类型", [515], RegisterDataType.UInt16, string.Empty, ValueTransform.CurrentEvent, FormatDescription: "见 5.4"),
-        new("当前故障数据 0", [516], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData0, FormatDescription: "见 5.5；按事件类型解析"),
-        EventAdditional("当前故障数据 1", 517),
-        EventAdditional("当前故障数据 2", 518),
-        EventData3("当前故障数据 3", 519),
-        EventAdditional("当前故障数据 4", 520),
-        EventAdditional("当前故障数据 5", 521),
-        EventAdditional("当前故障数据 6", 522),
-        EventAdditional("当前故障数据 7", 523),
+        new("当前故障/报警相别和类型", [515], RegisterDataType.UInt16, string.Empty, ValueTransform.CurrentEvent, FormatDescription: "见 5.4", ShowInTable: false),
+        new("当前故障数据 0", [516], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData0, FormatDescription: "见 5.5；按事件类型解析", ShowInTable: false),
+        EventAdditional("当前故障数据 1", 517, showInTable: false),
+        EventAdditional("当前故障数据 2", 518, showInTable: false),
+        EventData3("当前故障数据 3", 519, showInTable: false),
+        EventAdditional("当前故障数据 4", 520, showInTable: false),
+        EventAdditional("当前故障数据 5", 521, showInTable: false),
+        EventAdditional("当前故障数据 6", 522, showInTable: false),
+        EventAdditional("当前故障数据 7", 523, showInTable: false),
     ];
 
     public static IReadOnlyList<RegisterDefinition> FaultDefinitions { get; } =
@@ -109,13 +109,13 @@ public static class RegisterCatalog
     private static RegisterDefinition Current(string name, ushort address) =>
         new(name, [address], RegisterDataType.UInt16, "A", ValueTransform.CurrentRatio, FormatDescription: "×电流变比");
 
-    private static RegisterDefinition EventAdditional(string name, ushort address) =>
+    private static RegisterDefinition EventAdditional(string name, ushort address, bool showInTable = true) =>
         new(name, [address], RegisterDataType.UInt16, string.Empty, ValueTransform.EventAdditionalData,
-            FormatDescription: "故障/变位显示原始值；报警时为空");
+            FormatDescription: "故障/变位显示原始值；报警时为空", ShowInTable: showInTable);
 
-    private static RegisterDefinition EventData3(string name, ushort address) =>
+    private static RegisterDefinition EventData3(string name, ushort address, bool showInTable = true) =>
         new(name, [address], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData3Raw,
-            FormatDescription: "故障直接显示原始值；报警时为空");
+            FormatDescription: "故障直接显示原始值；报警时为空", ShowInTable: showInTable);
 
     private static RegisterDefinition UInt32(
         string name,

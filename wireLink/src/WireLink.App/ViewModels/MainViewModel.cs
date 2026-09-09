@@ -368,7 +368,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             var result = await _deviceService.ReadAsync(
                 (byte)address, WordOrder.HighWordFirst, SelectedControllerSeries, token);
-            Merge(DeviceRows, result.Values, result.Errors.Count > 0 ? "本区间读取失败，显示上次成功值" : null);
+            Merge(
+                DeviceRows,
+                ForTable(result.Values, RegisterCatalog.DeviceDefinitions),
+                result.Errors.Count > 0 ? "本区间读取失败，显示上次成功值" : null);
             _deviceReadAt = result.ReadAt;
             if (result.Errors.Count > 0)
             {
@@ -395,7 +398,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             Merge(
                 FaultRows,
-                ForTable(result.Values),
+                ForTable(result.Values, RegisterCatalog.FaultDefinitions),
                 result.Errors.Count > 0 ? "本字段读取失败，显示上次成功值" : null);
             _faultReadAt = result.ReadAt;
             _lastReadFaultRecordType = selectedType;
@@ -527,9 +530,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         .Where(definition => definition.ShowInTable)
         .Select(definition => new DecodedValue(definition.Name, definition.Addresses, "—", definition.Unit, "尚未读取", [], ParseStatus.ReadFailed, "尚未读取", DateTimeOffset.MinValue))
         .ToArray();
-    private static IReadOnlyList<DecodedValue> ForTable(IReadOnlyList<DecodedValue> values)
+    private static IReadOnlyList<DecodedValue> ForTable(
+        IReadOnlyList<DecodedValue> values,
+        IEnumerable<RegisterDefinition> definitions)
     {
-        var hidden = RegisterCatalog.FaultDefinitions
+        var hidden = definitions
             .Where(definition => !definition.ShowInTable)
             .Select(definition => definition.Name)
             .ToHashSet(StringComparer.Ordinal);
