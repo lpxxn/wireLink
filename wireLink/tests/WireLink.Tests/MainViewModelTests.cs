@@ -210,7 +210,8 @@ public sealed class MainViewModelTests
         Assert.Equal(20000,phaseAPoint.Y);
         Assert.NotNull(phaseA.YToolTipLabelFormatter);
         Assert.Contains("20000",viewModel.WaveformSummary);
-        Assert.Contains("Rate=2",viewModel.WaveformSummary);
+        Assert.Contains("框III，Rate=2",viewModel.WaveformSummary);
+        Assert.DoesNotContain("框架等级 2",viewModel.WaveformSummary);
 
         viewModel.ShowPhaseB=false;
         viewModel.ShowPhaseC=false;

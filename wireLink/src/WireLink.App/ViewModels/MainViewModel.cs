@@ -443,7 +443,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             WaveformSummary =
                 $"{data.SampleRateHz:0.###} Hz · 每相 {data.Points.Count} 点 · " +
                 $"A/B/C RMS：{data.PhaseAAmperesRms:0.0} / {data.PhaseBAmperesRms:0.0} / {data.PhaseCAmperesRms:0.0} A · " +
-                $"框架等级 {data.Calibration.FrameLevel}，Rate={data.Calibration.Rate:0.###}";
+                $"{data.Calibration.FrameName}，Rate={data.Calibration.Rate:0.###}";
             lock (progressStateLock)
             {
                 progressCompleted = true;

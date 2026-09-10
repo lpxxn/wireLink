@@ -57,10 +57,22 @@ public sealed record WaveformCalibration
     /// <summary>寄存器 1552 的完整 16 位原值，供日志、明细和导出追溯。</summary>
     public ushort RegisterValue { get; }
 
-    /// <summary>从寄存器 1552 的 bit8～bit11 提取出的框架等级。</summary>
+    /// <summary>从寄存器 1552 的 bit8～bit11 提取出的框架等级原值（0、1、2）。</summary>
     public byte FrameLevel { get; }
 
-    /// <summary>框架等级对应倍率：0→1，1→1.5，2→2。</summary>
+    /// <summary>
+    /// 框架等级在界面中的中文名称：0→框I，1→框II，2→框III。
+    /// 数字原值仍由 <see cref="FrameLevel"/> 保存，便于协议核查和 Excel 追溯。
+    /// </summary>
+    public string FrameName => FrameLevel switch
+    {
+        0 => "框I",
+        1 => "框II",
+        2 => "框III",
+        _ => throw new InvalidOperationException($"不受支持的框架等级：{FrameLevel}。"),
+    };
+
+    /// <summary>框架等级对应倍率：框I→1，框II→1.5，框III→2。</summary>
     public double Rate { get; }
 
     /// <summary>一个有符号 AD 单位对应的安培数。</summary>

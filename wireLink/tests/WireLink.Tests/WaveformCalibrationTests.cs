@@ -5,14 +5,19 @@ namespace WireLink.Tests;
 public sealed class WaveformCalibrationTests
 {
     [Theory]
-    [InlineData(0xF004,0,1.0)]
-    [InlineData(0xF104,1,1.5)]
-    [InlineData(0xF204,2,2.0)]
-    public void Frame_level_uses_only_bits_8_through_11(int registerValue,int expectedLevel,double expectedRate)
+    [InlineData(0xF004,0,"框I",1.0)]
+    [InlineData(0xF104,1,"框II",1.5)]
+    [InlineData(0xF204,2,"框III",2.0)]
+    public void Frame_level_uses_only_bits_8_through_11(
+        int registerValue,
+        int expectedLevel,
+        string expectedFrameName,
+        double expectedRate)
     {
         var calibration=WaveformCalibration.FromRegisterValue((ushort)registerValue);
 
         Assert.Equal((byte)expectedLevel,calibration.FrameLevel);
+        Assert.Equal(expectedFrameName,calibration.FrameName);
         Assert.Equal(expectedRate,calibration.Rate);
         Assert.Equal((ushort)registerValue,calibration.RegisterValue);
     }
