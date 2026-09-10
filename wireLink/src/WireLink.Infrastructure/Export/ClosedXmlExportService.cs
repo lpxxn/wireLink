@@ -152,8 +152,8 @@ public sealed class ClosedXmlExportService : IExcelExportService
         sheet.Cell(2, 4).Value = (int)data.Calibration.RegisterValue;
         sheet.Cell(2, 5).Value = "1552原值(hex)";
         sheet.Cell(2, 6).Value = $"0x{data.Calibration.RegisterValue:X4}";
-        sheet.Cell(3, 3).Value = "框架等级";
-        sheet.Cell(3, 4).Value = (int)data.Calibration.FrameLevel;
+        sheet.Cell(3, 3).Value = "框架名称";
+        sheet.Cell(3, 4).Value = data.Calibration.FrameName;
         sheet.Cell(4, 3).Value = "Rate";
         sheet.Cell(4, 4).Value = data.Calibration.Rate;
         sheet.Cell(4, 5).Value = "每AD安培系数";
