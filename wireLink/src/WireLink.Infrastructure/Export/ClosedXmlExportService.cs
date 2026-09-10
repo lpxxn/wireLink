@@ -185,7 +185,12 @@ public sealed class ClosedXmlExportService : IExcelExportService
             sheet.Cell(row, 4).Value = data.Calibration.ConvertToAmperes(point.PhaseB);
             sheet.Cell(row, 5).Value = data.Calibration.ConvertToAmperes(point.PhaseC);
         }
+        // sheet.Column(1).Width = 18;
         sheet.Column(2).Style.NumberFormat.Format = "0.0000";
+        // sheet.Column(2).Width = 18;
+        // remove the style for cell 4,2
+        sheet.Cell(3, 2).Style.NumberFormat.Format = null;
+        sheet.Cell(4, 2).Style.NumberFormat.Format = null;
         sheet.Columns(3, 5).Style.NumberFormat.Format = "0.0";
         foreach (var column in new[] { 2, 4, 6 })
             sheet.Cell(5, column).Style.NumberFormat.Format = "0.0";
