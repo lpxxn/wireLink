@@ -69,7 +69,7 @@ public sealed class ExportAndSimulatorTests
         var operationResponse=engine.Process(Crc16Modbus.Append([1,3,4,7,0,1]))!;
         Assert.Equal(128,(operationResponse[3]<<8)|operationResponse[4]);
         var ratedCurrentConfigurationResponse=engine.Process(Crc16Modbus.Append([1,3,6,16,0,1]))!;
-        Assert.Equal(0x0304,(ratedCurrentConfigurationResponse[3]<<8)|ratedCurrentConfigurationResponse[4]);
+        Assert.Equal(0x0204,(ratedCurrentConfigurationResponse[3]<<8)|ratedCurrentConfigurationResponse[4]);
         var write=Crc16Modbus.Append([1,6,3,17,2,1]);
         var echo=engine.Process(write)!;
         Assert.Equal(write,echo);
@@ -147,6 +147,10 @@ public sealed class ExportAndSimulatorTests
         Assert.Equal(2142.413718,data.PhaseARms,6);
         Assert.Equal(1786.377408,data.PhaseBRms,6);
         Assert.Equal(0.835414,data.PhaseCRms,6);
+        Assert.Equal((ushort)0x0204,data.Calibration.RegisterValue);
+        Assert.Equal(2,data.Calibration.Rate);
+        Assert.Equal(WaveformCalibration.RoundAmperes(
+            data.PhaseARms * 20000.0 / 22953.0),data.PhaseAAmperesRms);
     }
 
     [Fact]
@@ -166,7 +170,8 @@ public sealed class ExportAndSimulatorTests
                     (ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.B).StartAddress+local),
                     (ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.C).StartAddress+local));
             }).ToArray();
-            var data=new WaveformData(DateTimeOffset.Now,WaveformCatalog.SampleRateHz,points,1.25,2.5,3.75);
+            var calibration=WaveformCalibration.FromRegisterValue(0x0204);
+            var data=new WaveformData(DateTimeOffset.Now,WaveformCatalog.SampleRateHz,points,1.25,2.5,3.75,calibration);
 
             await new ClosedXmlExportService().ExportAsync(
                 path,new WaveformExcelExportContext("录波数据",data));
@@ -174,15 +179,29 @@ public sealed class ExportAndSimulatorTests
             using var book=new XLWorkbook(path);
             var analysis=book.Worksheet("波形数据");
             var details=book.Worksheet("读取明细");
-            Assert.Equal("采样序号",analysis.Cell(7,1).GetString());
-            Assert.Equal(391,analysis.LastRowUsed()!.RowNumber());
-            Assert.Equal(-80,analysis.Cell(8,2).GetDouble());
-            Assert.Equal(0,analysis.Cell(8,3).GetDouble());
-            Assert.Equal(XLDataType.Number,analysis.Cell(8,2).DataType);
+            Assert.Equal("采样序号",analysis.Cell(8,1).GetString());
+            Assert.Equal(392,analysis.LastRowUsed()!.RowNumber());
+            Assert.Equal(516,analysis.Cell(2,4).GetDouble());
+            Assert.Equal("0x0204",analysis.Cell(2,6).GetString());
+            Assert.Equal(2,analysis.Cell(3,4).GetDouble());
+            Assert.Equal(2,analysis.Cell(4,4).GetDouble());
+            Assert.Equal(20000.0 / 22953.0,analysis.Cell(4,6).GetDouble(),12);
+            Assert.Contains("22953.0",analysis.Cell(6,2).GetString());
+            Assert.Equal(-80,analysis.Cell(9,2).GetDouble());
+            Assert.Equal(0,analysis.Cell(9,3).GetDouble());
+            Assert.Equal(calibration.ConvertToAmperes(1000),analysis.Cell(9,4).GetDouble());
+            Assert.Equal(XLDataType.Number,analysis.Cell(9,2).DataType);
+            Assert.Equal(XLDataType.Number,analysis.Cell(9,4).DataType);
+            Assert.Equal("0.0",analysis.Cell(5,2).Style.NumberFormat.Format);
+            Assert.Equal("0.0",analysis.Cell(9,4).Style.NumberFormat.Format);
             Assert.Equal(1153,details.LastRowUsed()!.RowNumber());
+            Assert.Equal(10,details.LastColumnUsed()!.ColumnNumber());
             Assert.Equal("0xB000",details.Cell(2,8).GetString());
             Assert.Equal("0xB5BF",details.Cell(1153,8).GetString());
             Assert.Equal(-383,details.Cell(1153,9).GetDouble());
+            Assert.Equal(calibration.ConvertToAmperes(-383),details.Cell(1153,10).GetDouble());
+            Assert.Equal(XLDataType.Number,details.Cell(1153,10).DataType);
+            Assert.Equal("0.0",details.Cell(1153,10).Style.NumberFormat.Format);
         }
         finally { if(File.Exists(path))File.Delete(path); }
     }
@@ -204,7 +223,9 @@ public sealed class ExportAndSimulatorTests
                     checked((ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.B).StartAddress+local)),
                     checked((ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.C).StartAddress+local)));
             }).ToArray();
-            var data=new WaveformData(DateTimeOffset.Now,WaveformCatalog.SampleRateHz,points,1,2,3);
+            var data=new WaveformData(
+                DateTimeOffset.Now,WaveformCatalog.SampleRateHz,points,1,2,3,
+                WaveformCalibration.FromRegisterValue(0x0204));
 
             await new ClosedXmlExportService().ExportAsync(
                 path,new WaveformPointDetailsExcelExportContext("录波原始点明细",data));

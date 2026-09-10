@@ -246,13 +246,24 @@ Math.Sqrt(...)
 
 代码位置：[WaveformCatalog.cs](../src/WireLink.Core/Registers/WaveformCatalog.cs)。
 
-读取服务在三相 18 个块全部成功后，分别计算 A、B、C 三相 RMS：
+读取服务先成功读取 1552 标定参数，再在三相 18 个块全部成功后，分别计算 A、B、C 三相 AD-RMS：
 
 ```csharp
 WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.A])
 WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.B])
 WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.C])
 ```
+
+`WaveformCalibration` 再提供统一的每 AD 安培系数：
+
+```csharp
+public double AmperesPerAd => 10000.0 / 22953.0 * Rate;
+
+public double ConvertToAmperes(short signedAdValue) =>
+    Math.Round(signedAdValue * AmperesPerAd, 1, MidpointRounding.AwayFromZero);
+```
+
+页面曲线逐点调用 `ConvertToAmperes`。公式内部先完成浮点乘除，最后按通常四舍五入保留 1 位小数。因为这里是没有偏移量的正比例换算，所以安培 RMS 先用 `AD-RMS × AmperesPerAd` 计算，再统一保留 1 位小数。
 
 代码位置：[ApplicationServices.cs](../src/WireLink.Core/Services/ApplicationServices.cs)。
 
@@ -347,7 +358,7 @@ B580H C 相 RMS = 0.790569 AD
 
 当前 384 点 RMS 可以保留为总体摘要。后续如需增强故障分析，建议在页面或 Excel 中增加三相各 6 段的 RMS。
 
-## 10. 为什么当前单位是 AD，而不是 A
+## 10. AD 和安培怎样换算
 
 RMS 的单位与输入采样值相同：
 
@@ -356,46 +367,51 @@ RMS 的单位与输入采样值相同：
 输入是 AD → 结果是 AD-RMS
 ```
 
-当前协议只提供了录波寄存器原始值，没有提供 AD 到安培的标定公式。因此页面和 Excel 必须显示：
+厂商已经确认换算公式。软件先读取寄存器 `1552 (0x0610)`，只取 bit8～bit11：
 
 ```text
-4978.873768 AD-RMS
+框架等级 = (1552原值 >> 8) & 0x0F
 ```
 
-不能直接写成：
+框架等级与 Rate 的关系是：
 
 ```text
-4978.873768 A
+等级0 → Rate=1
+等级1 → Rate=1.5
+等级2 → Rate=2
 ```
 
-如果以后确认简单比例关系：
+每一个有符号 AD 点按下面公式换算：
 
 ```text
-1 AD = 0.01 A
+电流(A) = 有符号AD值 × 10000.0 ÷ 22953.0 × Rate
 ```
 
-而且不存在零点偏移，那么可以计算：
+用最简单的话说：`22953 AD` 是一个基准。当 Rate 是 1，它代表 `10000 A`；Rate 是 1.5，它代表 `15000 A`；Rate 是 2，它代表 `20000 A`。
+
+负号不会消失。例如 Rate=2：
 
 ```text
-4978.873768 × 0.01 = 49.78873768 A-RMS
+22953 AD  →  20000 A
+-22953 AD → -20000 A
+FFFFH     → 先转成 -1 AD → -0.9 A（保留1位小数）
 ```
 
-如果标定公式包含零点偏移：
+这个公式没有零点偏移项，只是固定比例乘法。因此两种做法在数学上等价：
 
 ```text
-电流 = 比例 × (AD值 - 零点偏移)
+做法1：每个 AD 点先乘系数，再对安培数组计算 RMS
+做法2：先算 AD-RMS，再乘同一个正系数
 ```
 
-就必须先转换每一个采样点，再计算 RMS：
+当前模型保留 AD-RMS，同时通过下面的线性关系得到安培 RMS：
 
 ```text
-原始 AD 数组
-→ 每一点减去偏移并乘比例
-→ 得到安培数组
-→ 对安培数组计算 RMS
+每AD安培系数 = 10000.0 ÷ 22953.0 × Rate
+安培RMS = AD-RMS × 每AD安培系数
 ```
 
-不能只对最终的 AD-RMS 简单减去偏移。
+主录波页面和主 Excel 显示安培；Shift+F8 原始点明细、原始值曲线和专用 16 列 Excel 继续显示原始 uint16 与有符号 AD，便于核对报文。
 
 ## 11. RMS 对测试有什么帮助
 
@@ -432,9 +448,10 @@ RMS
 5. 任一录波块失败时，不得用零补齐后继续计算 RMS；
 6. 不得把上一次数据与本次部分数据拼接；
 7. 平方累加必须使用 `double` 或足够大的数值类型，不能使用 `int`；
-8. 没有 AD→A 标定前，只能显示 AD 和 AD-RMS；
-9. 页面应说明当前显示的是整段 384 点 RMS，避免被误认为故障后稳态电流；
-10. 实机需要确认采样率、标定、跨段连续性和快照冻结行为。
+8. 必须先读取 1552，并只用 bit8～bit11 映射 Rate；等级 3～15 必须报错，不能猜测；
+9. AD→A 必须使用有符号值和 `double`，不能拿 `ushort` 原值换算；完成乘除后按通常四舍五入保留 1 位小数；
+10. 页面应说明当前显示的是整段 384 点安培 RMS，避免被误认为故障后稳态电流；
+11. 实机仍需确认采样率、跨段连续性和快照冻结行为。
 
 ## 13. 一句话总结
 
@@ -442,4 +459,4 @@ RMS
 
 > RMS 就是把一段正负变化的交流采样值，换算成一个能够代表这段波形整体有效大小的数。
 
-在代码中，先把 Modbus 数据正确解析成有符号采样点，再计算 RMS。协议解析负责“每个点读得对不对”，RMS 负责“这一整段波形总体有多大”。
+在代码中，先把 Modbus 数据正确解析成有符号采样点，再按 1552 框架等级换算安培并计算 RMS。协议解析负责“每个点读得对不对”，标定负责“AD 代表多少安培”，RMS 负责“这一整段波形总体有多大”。

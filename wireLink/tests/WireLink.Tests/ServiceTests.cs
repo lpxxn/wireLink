@@ -125,6 +125,7 @@ public sealed class ServiceTests
     {
         await using var client=new FakeClient((start,count)=>
         {
+            if(start==RegisterCatalog.RatedCurrentRegisterAddress) return [0x0204];
             var block=WaveformCatalog.Blocks.Single(item=>item.StartAddress==start);
             var phaseOffset=block.Phase switch
             {
@@ -138,14 +139,18 @@ public sealed class ServiceTests
                 .ToArray();
         });
         var progressEvents=new List<WaveformReadProgress>();
+        var trace=new RecordingProtocolTrace();
 
-        var result=await new WaveformDataService(client).ReadAsync(
+        var result=await new WaveformDataService(client,trace).ReadAsync(
             4,new InlineProgress<WaveformReadProgress>(progressEvents.Add));
 
-        Assert.Equal(WaveformCatalog.TotalBlocks,client.ReadRequests.Count);
+        Assert.Equal(WaveformCatalog.TotalBlocks + 1,client.ReadRequests.Count);
+        Assert.Equal(
+            (RegisterCatalog.RatedCurrentRegisterAddress,(ushort)1),
+            (client.ReadRequests[0].Start,client.ReadRequests[0].Count));
         Assert.Equal(
             WaveformCatalog.Blocks.Select(block=>(block.StartAddress,block.Count)),
-            client.ReadRequests.Select(request=>(request.Start,request.Count)));
+            client.ReadRequests.Skip(1).Select(request=>(request.Start,request.Count)));
         Assert.Equal(384,result.Points.Count);
         Assert.Equal(-80,result.Points[0].TimeMilliseconds);
         Assert.Equal(39.6875,result.Points[^1].TimeMilliseconds);
@@ -159,6 +164,17 @@ public sealed class ServiceTests
         Assert.Equal((ushort)0xB5BF,result.Points[^1].PhaseCAddress);
         Assert.Equal(18,progressEvents.Count);
         Assert.Equal(18,progressEvents[^1].CompletedBlocks);
+        Assert.Equal((ushort)0x0204,result.Calibration.RegisterValue);
+        Assert.Equal((byte)2,result.Calibration.FrameLevel);
+        Assert.Equal(2,result.Calibration.Rate);
+        Assert.Equal(WaveformCalibration.RoundAmperes(
+            result.PhaseARms * result.Calibration.AmperesPerAd),result.PhaseAAmperesRms);
+        Assert.Equal(WaveformCalibration.RoundAmperes(
+            result.PhaseBRms * result.Calibration.AmperesPerAd),result.PhaseBAmperesRms);
+        Assert.Equal(WaveformCalibration.RoundAmperes(
+            result.PhaseCRms * result.Calibration.AmperesPerAd),result.PhaseCAmperesRms);
+        Assert.Contains(trace.InformationMessages,message=>
+            message.Contains("寄存器1552=516") && message.Contains("框架等级=2") && message.Contains("Rate=2"));
     }
 
     [Fact]
@@ -166,6 +182,7 @@ public sealed class ServiceTests
     {
         await using var client=new FakeClient((start,count)=>
         {
+            if(start==RegisterCatalog.RatedCurrentRegisterAddress) return [0x0204];
             if(start==0xB240) throw new TimeoutException("模拟录波超时");
             return new ushort[count];
         });
@@ -175,8 +192,36 @@ public sealed class ServiceTests
 
         Assert.Contains("B 相",exception.Message);
         Assert.Contains("0xB240",exception.Message);
-        Assert.Equal(8,client.ReadRequests.Count);
+        Assert.Equal(9,client.ReadRequests.Count);
         Assert.Equal((ushort)0xB240,client.ReadRequests[^1].Start);
+    }
+
+    [Fact]
+    public async Task Waveform_read_stops_before_waveform_blocks_when_calibration_read_fails()
+    {
+        await using var client=new FakeClient((start,_)=>
+            throw new TimeoutException($"寄存器 {start} 超时"));
+
+        var exception=await Assert.ThrowsAsync<InvalidOperationException>(
+            ()=>new WaveformDataService(client).ReadAsync(4));
+
+        Assert.Contains("1552",exception.Message);
+        Assert.Single(client.ReadRequests);
+        Assert.Equal((ushort)1552,client.ReadRequests[0].Start);
+    }
+
+    [Theory]
+    [InlineData(0x0304)]
+    [InlineData(0x0F04)]
+    public async Task Waveform_read_rejects_unknown_frame_level_before_waveform_blocks(int registerValue)
+    {
+        await using var client=new FakeClient((_,_)=>[(ushort)registerValue]);
+
+        var exception=await Assert.ThrowsAsync<InvalidOperationException>(
+            ()=>new WaveformDataService(client).ReadAsync(4));
+
+        Assert.Contains("框架等级",exception.Message);
+        Assert.Single(client.ReadRequests);
     }
 
     private static ushort[] CreateFaultRecord()

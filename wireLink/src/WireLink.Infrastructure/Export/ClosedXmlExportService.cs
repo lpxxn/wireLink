@@ -148,18 +148,30 @@ public sealed class ClosedXmlExportService : IExcelExportService
         sheet.Cell(3, 2).Value = data.SampleRateHz;
         sheet.Cell(4, 1).Value = "每相点数";
         sheet.Cell(4, 2).Value = data.Points.Count;
-        sheet.Cell(5, 1).Value = "A相 AD-RMS";
-        sheet.Cell(5, 2).Value = data.PhaseARms;
-        sheet.Cell(5, 3).Value = "B相 AD-RMS";
-        sheet.Cell(5, 4).Value = data.PhaseBRms;
-        sheet.Cell(5, 5).Value = "C相 AD-RMS";
-        sheet.Cell(5, 6).Value = data.PhaseCRms;
+        sheet.Cell(2, 3).Value = "1552原值(dec)";
+        sheet.Cell(2, 4).Value = (int)data.Calibration.RegisterValue;
+        sheet.Cell(2, 5).Value = "1552原值(hex)";
+        sheet.Cell(2, 6).Value = $"0x{data.Calibration.RegisterValue:X4}";
+        sheet.Cell(3, 3).Value = "框架等级";
+        sheet.Cell(3, 4).Value = (int)data.Calibration.FrameLevel;
+        sheet.Cell(4, 3).Value = "Rate";
+        sheet.Cell(4, 4).Value = data.Calibration.Rate;
+        sheet.Cell(4, 5).Value = "每AD安培系数";
+        sheet.Cell(4, 6).Value = data.Calibration.AmperesPerAd;
+        sheet.Cell(5, 1).Value = "A相 RMS(A)";
+        sheet.Cell(5, 2).Value = data.PhaseAAmperesRms;
+        sheet.Cell(5, 3).Value = "B相 RMS(A)";
+        sheet.Cell(5, 4).Value = data.PhaseBAmperesRms;
+        sheet.Cell(5, 5).Value = "C相 RMS(A)";
+        sheet.Cell(5, 6).Value = data.PhaseCAmperesRms;
+        sheet.Cell(6, 1).Value = "换算公式";
+        sheet.Cell(6, 2).Value = "有符号AD值 × 10000.0 ÷ 22953.0 × Rate";
 
-        var headerRow = 7;
+        var headerRow = 8;
         foreach (var (column, value) in new[]
                  {
-                     (1, "采样序号"), (2, "时间(ms)"), (3, "A相AD"),
-                     (4, "B相AD"), (5, "C相AD"),
+                     (1, "采样序号"), (2, "时间(ms)"), (3, "A相(A)"),
+                     (4, "B相(A)"), (5, "C相(A)"),
                  })
             sheet.Cell(headerRow, column).Value = value;
 
@@ -169,10 +181,14 @@ public sealed class ClosedXmlExportService : IExcelExportService
             var row = headerRow + index + 1;
             sheet.Cell(row, 1).Value = point.SampleIndex;
             sheet.Cell(row, 2).Value = point.TimeMilliseconds;
-            sheet.Cell(row, 3).Value = (int)point.PhaseA;
-            sheet.Cell(row, 4).Value = (int)point.PhaseB;
-            sheet.Cell(row, 5).Value = (int)point.PhaseC;
+            sheet.Cell(row, 3).Value = data.Calibration.ConvertToAmperes(point.PhaseA);
+            sheet.Cell(row, 4).Value = data.Calibration.ConvertToAmperes(point.PhaseB);
+            sheet.Cell(row, 5).Value = data.Calibration.ConvertToAmperes(point.PhaseC);
         }
+        sheet.Column(2).Style.NumberFormat.Format = "0.0000";
+        sheet.Columns(3, 5).Style.NumberFormat.Format = "0.0";
+        foreach (var column in new[] { 2, 4, 6 })
+            sheet.Cell(5, column).Style.NumberFormat.Format = "0.0";
     }
 
     private static void WriteWaveformDetailSheet(
@@ -185,7 +201,7 @@ public sealed class ClosedXmlExportService : IExcelExportService
                  {
                      (1, "段"), (2, "时间段"), (3, "相别"), (4, "段内序号"),
                      (5, "全局序号"), (6, "时间(ms)"), (7, "地址"),
-                     (8, "地址HEX"), (9, "AD值"),
+                     (8, "地址HEX"), (9, "AD值"), (10, "电流(A)"),
                  })
             sheet.Cell(1, column).Value = value;
 
@@ -214,7 +230,10 @@ public sealed class ClosedXmlExportService : IExcelExportService
                 sheet.Cell(row, 7).Value = (int)address;
                 sheet.Cell(row, 8).Value = $"0x{address:X4}";
                 sheet.Cell(row, 9).Value = (int)value;
+                sheet.Cell(row, 10).Value = context.Data.Calibration.ConvertToAmperes(value);
             }
         }
+        sheet.Column(6).Style.NumberFormat.Format = "0.0000";
+        sheet.Column(10).Style.NumberFormat.Format = "0.0";
     }
 }

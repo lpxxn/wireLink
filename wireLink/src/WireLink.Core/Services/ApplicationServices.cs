@@ -21,7 +21,7 @@ public interface IFaultRecordService
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>固定录波区读取服务。只有 18 个块全部成功时才返回完整数据。</summary>
+/// <summary>固定录波区读取服务。只有标定参数和 18 个块全部成功时才返回完整数据。</summary>
 public interface IWaveformDataService
 {
     Task<WaveformData> ReadAsync(
@@ -197,7 +197,8 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
 }
 
 /// <summary>
-/// 按协议规定的 18 个块依次读取三相录波。任一块失败即终止，避免把不同批次或残缺数据拼接。
+/// 先读取寄存器 1552 的框架等级，再按协议规定的 18 个块依次读取三相录波。
+/// 任一请求失败即终止，避免使用错误标定或把不同批次、残缺数据拼接。
 /// </summary>
 public sealed class WaveformDataService(IModbusRtuClient client, IProtocolTrace? trace = null)
     : IWaveformDataService
@@ -210,6 +211,35 @@ public sealed class WaveformDataService(IModbusRtuClient client, IProtocolTrace?
         CancellationToken cancellationToken = default)
     {
         var readAt = DateTimeOffset.Now;
+        WaveformCalibration calibration;
+        try
+        {
+            var calibrationRegisters = await client.ReadHoldingRegistersAsync(
+                slaveAddress,
+                RegisterCatalog.RatedCurrentRegisterAddress,
+                1,
+                cancellationToken);
+            if (calibrationRegisters.Length != 1)
+                throw new ModbusProtocolException(
+                    $"框架等级寄存器返回数量错误：期望 1，收到 {calibrationRegisters.Length}。");
+
+            calibration = WaveformCalibration.FromRegisterValue(calibrationRegisters[0]);
+            _trace.Information(
+                $"录波标定读取成功；寄存器1552={calibration.RegisterValue} " +
+                $"(0x{calibration.RegisterValue:X4})；框架等级={calibration.FrameLevel}；" +
+                $"Rate={calibration.Rate:0.###}；每AD安培系数={calibration.AmperesPerAd:R}");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var message = $"读取录波标定参数失败：寄存器 1552 (0x0610)：{ex.Message}";
+            _trace.Error(message, ex);
+            throw new InvalidOperationException(message, ex);
+        }
+
         var phaseValues = Enum.GetValues<WaveformPhase>()
             .ToDictionary(phase => phase, _ => new short[WaveformCatalog.PointsPerPhase]);
         var completed = 0;
@@ -281,6 +311,7 @@ public sealed class WaveformDataService(IModbusRtuClient client, IProtocolTrace?
             points,
             WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.A]),
             WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.B]),
-            WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.C]));
+            WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.C]),
+            calibration);
     }
 }

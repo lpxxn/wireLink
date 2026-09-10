@@ -13,7 +13,9 @@ public sealed class WaveformRawChartViewModelTests
             Point(0, -80, -1, -320, 1),
             Point(1, -79.6875, short.MinValue, short.MaxValue, 0),
         };
-        var data = new WaveformData(DateTimeOffset.Now, 3200, points, 0, 0, 0);
+        var data = new WaveformData(
+            DateTimeOffset.Now, 3200, points, 0, 0, 0,
+            WaveformCalibration.FromRegisterValue(0x0204));
 
         var viewModel = new WaveformRawChartViewModel(data);
 
@@ -38,7 +40,8 @@ public sealed class WaveformRawChartViewModelTests
             [Point(0, -80, -1, 2, -3)],
             0,
             0,
-            0);
+            0,
+            WaveformCalibration.FromRegisterValue(0x0204));
         var viewModel = new WaveformRawChartViewModel(data);
 
         viewModel.ShowPhaseA = false;

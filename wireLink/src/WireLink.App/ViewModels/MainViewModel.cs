@@ -117,7 +117,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     ];
     public Axis[] WaveformYAxes { get; } =
     [
-        new Axis { Name = "原始采样值 (AD)", Labeler = value => value.ToString("0") },
+        new Axis { Name = "电流 (A)", Labeler = value => value.ToString("0.0") },
     ];
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> RefreshPortsCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ToggleSerialCommand { get; }
@@ -414,7 +414,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (!CanRead || DeviceAddress is not int address) return;
         await RunBusyAsync(async token =>
         {
-            WaveformProgressText = $"准备读取 0/{WaveformCatalog.TotalBlocks}";
+            WaveformProgressText = "正在读取框架等级：1552 (0610H)";
             var progressStateLock = new object();
             var progressCompleted = false;
             var progress = new Progress<WaveformReadProgress>(value =>
@@ -430,14 +430,20 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             });
             var data = await _waveformService.ReadAsync((byte)address, progress, token);
 
-            // 只有 18 块全部成功后才替换上一次完整结果。
+            // 只有 1552 标定参数和 18 个录波块全部成功后，才替换上一次完整结果。
             _waveformData = data;
             this.RaisePropertyChanged(nameof(CurrentWaveformData));
-            _phaseASeries.Values = data.Points.Select(point => new ObservablePoint(point.TimeMilliseconds, point.PhaseA)).ToArray();
-            _phaseBSeries.Values = data.Points.Select(point => new ObservablePoint(point.TimeMilliseconds, point.PhaseB)).ToArray();
-            _phaseCSeries.Values = data.Points.Select(point => new ObservablePoint(point.TimeMilliseconds, point.PhaseC)).ToArray();
+            _phaseASeries.Values = data.Points.Select(point => new ObservablePoint(
+                point.TimeMilliseconds, data.Calibration.ConvertToAmperes(point.PhaseA))).ToArray();
+            _phaseBSeries.Values = data.Points.Select(point => new ObservablePoint(
+                point.TimeMilliseconds, data.Calibration.ConvertToAmperes(point.PhaseB))).ToArray();
+            _phaseCSeries.Values = data.Points.Select(point => new ObservablePoint(
+                point.TimeMilliseconds, data.Calibration.ConvertToAmperes(point.PhaseC))).ToArray();
             FixWaveformYAxis(data);
-            WaveformSummary = $"{data.SampleRateHz:0.###} Hz · 每相 {data.Points.Count} 点 · A/B/C RMS：{data.PhaseARms:0.###} / {data.PhaseBRms:0.###} / {data.PhaseCRms:0.###} AD";
+            WaveformSummary =
+                $"{data.SampleRateHz:0.###} Hz · 每相 {data.Points.Count} 点 · " +
+                $"A/B/C RMS：{data.PhaseAAmperesRms:0.0} / {data.PhaseBAmperesRms:0.0} / {data.PhaseCAmperesRms:0.0} A · " +
+                $"框架等级 {data.Calibration.FrameLevel}，Rate={data.Calibration.Rate:0.###}";
             lock (progressStateLock)
             {
                 progressCompleted = true;
@@ -571,10 +577,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Fill = null,
         GeometrySize = 0,
         LineSmoothness = 0,
+        XToolTipLabelFormatter = point => $"{point.Coordinate.SecondaryValue:0.####} ms",
+        YToolTipLabelFormatter = point => $"{point.Coordinate.PrimaryValue:0.0} A",
     };
 
     /// <summary>
-    /// 使用本次完整录波的三相全部采样值固定 Y 轴。相别显隐只改变曲线集合，不再触发自动缩放。
+    /// 使用本次完整录波的三相全部安培值固定 Y 轴。相别显隐只改变曲线集合，不再触发自动缩放。
     /// </summary>
     private void FixWaveformYAxis(WaveformData data)
     {
@@ -587,9 +595,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var maximumAbsoluteValue = data.Points.Max(point => Math.Max(
-            Math.Abs((int)point.PhaseA),
-            Math.Max(Math.Abs((int)point.PhaseB), Math.Abs((int)point.PhaseC))));
-        var padding = Math.Max(1, (int)Math.Ceiling(maximumAbsoluteValue * 0.08));
+            Math.Abs(data.Calibration.ConvertToAmperes(point.PhaseA)),
+            Math.Max(
+                Math.Abs(data.Calibration.ConvertToAmperes(point.PhaseB)),
+                Math.Abs(data.Calibration.ConvertToAmperes(point.PhaseC)))));
+        var padding = Math.Max(1.0, maximumAbsoluteValue * 0.08);
         var limit = maximumAbsoluteValue + padding;
         axis.MinLimit = -limit;
         axis.MaxLimit = limit;

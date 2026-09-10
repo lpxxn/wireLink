@@ -1,4 +1,6 @@
 using System.Reactive.Threading.Tasks;
+using LiveChartsCore.Defaults;
+using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
 using LiveChartsCore.SkiaSharpView.Painting.Effects;
 using WireLink.App.ViewModels;
@@ -200,18 +202,46 @@ public sealed class MainViewModelTests
         await viewModel.ReadWaveformCommand.Execute().ToTask();
 
         var axis=Assert.Single(viewModel.WaveformYAxes);
-        Assert.Equal(-4,axis.MinLimit);
-        Assert.Equal(4,axis.MaxLimit);
+        Assert.Equal(-21600,axis.MinLimit);
+        Assert.Equal(21600,axis.MaxLimit);
+        Assert.Equal("电流 (A)",axis.Name);
+        var phaseA=Assert.IsType<LineSeries<ObservablePoint>>(viewModel.WaveformSeries[0]);
+        var phaseAPoint=Assert.Single(phaseA.Values!.Cast<ObservablePoint>());
+        Assert.Equal(20000,phaseAPoint.Y);
+        Assert.NotNull(phaseA.YToolTipLabelFormatter);
+        Assert.Contains("20000",viewModel.WaveformSummary);
+        Assert.Contains("Rate=2",viewModel.WaveformSummary);
 
         viewModel.ShowPhaseB=false;
         viewModel.ShowPhaseC=false;
-        Assert.Equal(-4,axis.MinLimit);
-        Assert.Equal(4,axis.MaxLimit);
+        Assert.Equal(-21600,axis.MinLimit);
+        Assert.Equal(21600,axis.MaxLimit);
 
         viewModel.ShowPhaseA=false;
         viewModel.ShowPhaseC=true;
-        Assert.Equal(-4,axis.MinLimit);
-        Assert.Equal(4,axis.MaxLimit);
+        Assert.Equal(-21600,axis.MinLimit);
+        Assert.Equal(21600,axis.MaxLimit);
+    }
+
+    [Fact]
+    public async Task Failed_followup_waveform_read_preserves_last_complete_ampere_waveform()
+    {
+        await using var viewModel=CreateViewModel(
+            ["COM10"],
+            new AppSettings(PortName:"COM10"),
+            deviceService:new ConnectedDeviceDataService(),
+            waveformService:new SucceedThenFailWaveformDataService());
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+
+        await viewModel.ReadWaveformCommand.Execute().ToTask();
+        var firstData=viewModel.CurrentWaveformData;
+        var firstSummary=viewModel.WaveformSummary;
+        await viewModel.ReadWaveformCommand.Execute().ToTask();
+
+        Assert.Same(firstData,viewModel.CurrentWaveformData);
+        Assert.Equal(firstSummary,viewModel.WaveformSummary);
+        Assert.Contains("读取录波数据失败",viewModel.Notice);
     }
 
     private static MainViewModel CreateViewModel(
@@ -320,15 +350,38 @@ public sealed class MainViewModelTests
 
             IReadOnlyList<WaveformPoint> points=
             [
-                new WaveformPoint(0,0,0,-80,1,2,3,0xAC00,0xAC80,0xAD00),
+                new WaveformPoint(0,0,0,-80,22953,-22953,0,0xAC00,0xAC80,0xAD00),
             ];
             return Task.FromResult(new WaveformData(
                 new DateTimeOffset(2026,8,11,12,0,0,TimeSpan.FromHours(8)),
                 3200,
                 points,
-                1,
-                2,
-                3));
+                22953,
+                22953,
+                0,
+                WaveformCalibration.FromRegisterValue(0x0204)));
+        }
+    }
+
+    private sealed class SucceedThenFailWaveformDataService : IWaveformDataService
+    {
+        private int _calls;
+
+        public Task<WaveformData> ReadAsync(byte slaveAddress,
+            IProgress<WaveformReadProgress>? progress=null,
+            CancellationToken cancellationToken=default)
+        {
+            if(_calls++>0)
+                return Task.FromException<WaveformData>(
+                    new InvalidOperationException("框架等级寄存器 1552 读取失败"));
+
+            IReadOnlyList<WaveformPoint> points=
+            [
+                new WaveformPoint(0,0,0,-80,22953,-22953,0,0xB000,0xB040,0xB080),
+            ];
+            return Task.FromResult(new WaveformData(
+                DateTimeOffset.Now,3200,points,22953,22953,0,
+                WaveformCalibration.FromRegisterValue(0x0204)));
         }
     }
 
