@@ -149,10 +149,6 @@ public sealed class ClosedXmlExportService : IExcelExportService
         sheet.Cell(3, 2).Value = data.SampleRateHz;
         sheet.Cell(4, 1).Value = "每相点数";
         sheet.Cell(4, 2).Value = data.Points.Count;
-        // sheet.Cell(2, 3).Value = "1552原值(dec)";
-        // sheet.Cell(2, 4).Value = (int)data.Calibration.RegisterValue;
-        // sheet.Cell(2, 5).Value = "1552原值(hex)";
-        // sheet.Cell(2, 6).Value = $"0x{data.Calibration.RegisterValue:X4}";
         sheet.Cell(3, 3).Value = "框架";
         sheet.Cell(3, 4).Value = data.Calibration.FrameName;
         sheet.Cell(4, 3).Value = "Rate";
@@ -167,18 +163,6 @@ public sealed class ClosedXmlExportService : IExcelExportService
         sheet.Cell(5, 6).Value = data.PhaseCAmperesRms;
         sheet.Cell(6, 1).Value = "换算公式";
         sheet.Cell(6, 2).Value = "有符号AD值 × 10000 ÷ 22953 × Rate";
-        // sheet.Cell(7, 1).Value = "时间来源记录";
-        // sheet.Cell(7, 2).Value = $"{DescribeFaultRecordType(timing.RecordType)} / 第 {timing.RecordIndex} 条记录";
-        // sheet.Cell(7, 3).Value = "故障记录时间";
-        // sheet.Cell(7, 4).Value = timing.FaultRecordTime;
-        // sheet.Cell(7, 5).Value = "软件补充毫秒";
-        // sheet.Cell(7, 6).Value = timing.SoftwareMilliseconds;
-        // sheet.Cell(8, 1).Value = "录波首点时间";
-        // sheet.Cell(8, 2).Value = timing.WaveformStartTime;
-        // sheet.Cell(8, 3).Value = "录波末点时间";
-        // sheet.Cell(8, 4).Value = data.WaveformEndTime;
-        // sheet.Cell(8, 5).Value = "时间说明";
-        // sheet.Cell(8, 6).Value = "毫秒为软件稳定补充值，并非设备实测值";
 
         var headerRow = 8;
         foreach (var (column, value) in new[]
@@ -221,9 +205,6 @@ public sealed class ClosedXmlExportService : IExcelExportService
         sheet.Column(1).Width = 12;
         sheet.Column(2).Width = 16;
         sheet.Column(3).Width = 25;
-        // sheet.Column(4).Width = 24;
-        // sheet.Column(5).Width = 18;
-        // sheet.Column(6).Width = 42;
     }
 
     private static void WriteWaveformDetailSheet(
@@ -232,21 +213,9 @@ public sealed class ClosedXmlExportService : IExcelExportService
         CancellationToken cancellationToken)
     {
         var data = context.Data;
-        var timing = data.Timing ?? throw new InvalidOperationException("录波数据没有故障记录时间，不能导出绝对时间。");
         var sheet = workbook.Worksheets.Add("读取明细");
         sheet.Cell(1, 1).Value = "录波读取明细";
-        // sheet.Cell(2, 1).Value = "时间来源记录";
-        // sheet.Cell(2, 2).Value = $"{DescribeFaultRecordType(timing.RecordType)} / 第 {timing.RecordIndex} 条记录";
-        // sheet.Cell(2, 3).Value = "故障记录时间";
-        // sheet.Cell(2, 4).Value = timing.FaultRecordTime;
-        // sheet.Cell(2, 5).Value = "软件补充毫秒";
-        // sheet.Cell(2, 6).Value = timing.SoftwareMilliseconds;
-        // sheet.Cell(2, 7).Value = "录波首点时间";
-        // sheet.Cell(2, 8).Value = timing.WaveformStartTime;
-        // sheet.Cell(2, 9).Value = "录波末点时间";
-        // sheet.Cell(2, 10).Value = data.WaveformEndTime;
-        // sheet.Cell(3, 1).Value = "时间说明";
-        // sheet.Cell(3, 2).Value = "毫秒为软件稳定补充值，并非设备实测值";
+
         const int headerRow = 3;
         foreach (var (column, value) in new[]
                  {
