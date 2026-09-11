@@ -166,7 +166,7 @@ public sealed class ClosedXmlExportService : IExcelExportService
         sheet.Cell(5, 5).Value = "C相 RMS(A)";
         sheet.Cell(5, 6).Value = data.PhaseCAmperesRms;
         sheet.Cell(6, 1).Value = "换算公式";
-        sheet.Cell(6, 2).Value = "有符号AD值 × 10000.0 ÷ 22953.0 × Rate";
+        sheet.Cell(6, 2).Value = "有符号AD值 × 10000 ÷ 22953 × Rate";
         // sheet.Cell(7, 1).Value = "时间来源记录";
         // sheet.Cell(7, 2).Value = $"{DescribeFaultRecordType(timing.RecordType)} / 第 {timing.RecordIndex} 条记录";
         // sheet.Cell(7, 3).Value = "故障记录时间";
