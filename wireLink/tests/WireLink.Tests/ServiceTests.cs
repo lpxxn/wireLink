@@ -1,5 +1,6 @@
 using WireLink.Core.Communication;
 using WireLink.Core.Models;
+using WireLink.Core.Protocol;
 using WireLink.Core.Registers;
 using WireLink.Core.Services;
 
@@ -51,6 +52,50 @@ public sealed class ServiceTests
             result.Values.Single(x=>x.Name=="故障记录时间").Value);
         Assert.Equal("630 A",result.Values.Single(x=>x.Name=="额定电流").DisplayValue);
         Assert.Equal("128",result.Values.Single(x=>x.Name=="总操作次数").Value);
+    }
+
+    [Fact]
+    public async Task Fault_timestamp_read_selects_record_and_reads_only_three_time_registers()
+    {
+        await using var client=new FakeClient((start,count)=>
+        {
+            Assert.Equal((ushort)768,start);
+            Assert.Equal((ushort)3,count);
+            return [0x2607,0x2214,0x3009];
+        });
+
+        var value=await new FaultRecordService(client,new RegisterParser()).ReadTimestampAsync(
+            4,FaultRecordType.StateChange,3,TimeSpan.Zero);
+
+        Assert.Equal(new DateTime(2026,7,22,14,30,9,DateTimeKind.Unspecified),value);
+        Assert.Equal(((ushort)785,(ushort)0x0302),client.LastWrite);
+        Assert.Equal([(Start:(ushort)768,Count:(ushort)3)],client.ReadRequests);
+    }
+
+    [Fact]
+    public async Task Empty_fault_timestamp_is_rejected_before_waveform_can_start()
+    {
+        await using var client=new FakeClient((_,_)=>[0,0,0]);
+
+        var exception=await Assert.ThrowsAsync<FormatException>(()=>
+            new FaultRecordService(client,new RegisterParser()).ReadTimestampAsync(
+                4,FaultRecordType.Fault,1,TimeSpan.Zero));
+
+        Assert.Contains("故障记录时间为空",exception.Message);
+        Assert.Single(client.ReadRequests);
+    }
+
+    [Fact]
+    public async Task Fault_timestamp_read_requires_exactly_three_registers()
+    {
+        await using var client=new FakeClient((_,_)=>[0x2607,0x2214]);
+
+        var exception=await Assert.ThrowsAsync<ModbusProtocolException>(()=>
+            new FaultRecordService(client,new RegisterParser()).ReadTimestampAsync(
+                4,FaultRecordType.Fault,1,TimeSpan.Zero));
+
+        Assert.Contains("期望 3，收到 2",exception.Message);
+        Assert.Single(client.ReadRequests);
     }
 
     [Fact]

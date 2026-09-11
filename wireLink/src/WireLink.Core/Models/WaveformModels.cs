@@ -36,6 +36,31 @@ public sealed record WaveformPoint(
     ushort PhaseCAddress);
 
 /// <summary>
+/// 录波绝对时间上下文。设备故障时间只有秒精度，SoftwareMilliseconds 是软件生成并持久化的补充毫秒，
+/// 仅用于构造稳定的录波时间轴，不表示设备实际记录到了该毫秒。
+/// </summary>
+public sealed record WaveformTiming(
+    DateTime FaultRecordTime,
+    int SoftwareMilliseconds,
+    FaultRecordType RecordType,
+    byte RecordIndex)
+{
+    public DateTime WaveformStartTime
+    {
+        get
+        {
+            if (SoftwareMilliseconds is < 0 or > 999)
+                throw new ArgumentOutOfRangeException(
+                    nameof(SoftwareMilliseconds),
+                    SoftwareMilliseconds,
+                    "软件补充毫秒必须为 0～999。");
+
+            return FaultRecordTime.AddTicks(SoftwareMilliseconds * TimeSpan.TicksPerMillisecond);
+        }
+    }
+}
+
+/// <summary>
 /// 录波 AD 值到安培的标定信息。框架等级来自寄存器 1552 的 bit8～bit11；
 /// bit0～bit7 的额定电流序值和 bit12～bit15 的保留位均不参与本换算。
 /// </summary>
@@ -120,6 +145,28 @@ public sealed record WaveformData(
     double PhaseCRms,
     WaveformCalibration Calibration)
 {
+    /// <summary>主页面和主 Excel 使用的绝对时间上下文；原始协议测试可不设置。</summary>
+    public WaveformTiming? Timing { get; init; }
+
+    /// <summary>把协议中的相对毫秒转换为绝对时间，使用 ticks 保留 0.3125 ms 采样间隔。</summary>
+    public DateTime GetAbsoluteTime(double relativeMilliseconds)
+    {
+        if (Timing is null)
+            throw new InvalidOperationException("录波数据没有故障记录时间，无法生成绝对时间。");
+        if (Points.Count == 0)
+            throw new InvalidOperationException("录波数据没有采样点，无法生成绝对时间。");
+
+        var elapsedMilliseconds = relativeMilliseconds - Points[0].TimeMilliseconds;
+        var elapsedTicks = checked((long)Math.Round(
+            elapsedMilliseconds * TimeSpan.TicksPerMillisecond,
+            MidpointRounding.AwayFromZero));
+        return Timing.WaveformStartTime.AddTicks(elapsedTicks);
+    }
+
+    public DateTime WaveformEndTime => Points.Count == 0
+        ? Timing?.WaveformStartTime ?? throw new InvalidOperationException("录波数据没有故障记录时间。")
+        : GetAbsoluteTime(Points[^1].TimeMilliseconds);
+
     /// <summary>A 相安培 RMS；线性倍率下等于 AD-RMS 乘每 AD 安培系数。</summary>
     public double PhaseAAmperesRms => WaveformCalibration.RoundAmperes(
         PhaseARms * Calibration.AmperesPerAd);

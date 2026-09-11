@@ -374,21 +374,13 @@ public sealed class RegisterParser
         if (samples.Count != 3)
             throw new FormatException("完整时间必须包含年月、日时、分秒三个寄存器。");
 
-        var year = 2000 + DecodeBcd((byte)(samples[0].Value >> 8));
-        var month = DecodeBcd((byte)samples[0].Value);
-        var day = DecodeBcd((byte)(samples[1].Value >> 8));
-        var hour = DecodeBcd((byte)samples[1].Value);
-        var minute = DecodeBcd((byte)(samples[2].Value >> 8));
-        var second = DecodeBcd((byte)samples[2].Value);
-
-        if (month is < 1 or > 12) throw new FormatException($"无效月份 {month}");
-        if (day is < 1 or > 31) throw new FormatException($"无效日期 {day}");
-        if (hour > 23) throw new FormatException($"无效小时 {hour}");
-        if (minute > 59) throw new FormatException($"无效分钟 {minute}");
-        if (second > 59) throw new FormatException($"无效秒 {second}");
+        var value = FaultRecordTimeDecoder.Decode(
+            samples[0].Value,
+            samples[1].Value,
+            samples[2].Value);
 
         return (
-            $"{year:0000}-{month:00}-{day:00} {hour:00}:{minute:00}:{second:00}",
+            FaultRecordTimeDecoder.Format(value),
             "768～770/780～782 按 BCD 组合时间",
             ParseStatus.Success,
             null);

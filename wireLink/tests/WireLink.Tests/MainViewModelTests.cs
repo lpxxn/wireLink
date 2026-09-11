@@ -64,6 +64,7 @@ public sealed class MainViewModelTests
         Assert.True(viewModel.CanRead);
         Assert.True(viewModel.CanAutoRefresh);
         Assert.True(viewModel.CanReadFault);
+        Assert.True(viewModel.CanReadWaveform);
 
         viewModel.RefreshSeconds=null;
         Assert.Null(viewModel.RefreshSeconds);
@@ -73,17 +74,20 @@ public sealed class MainViewModelTests
         viewModel.FaultRecordIndex=null;
         Assert.Null(viewModel.FaultRecordIndex);
         Assert.False(viewModel.CanReadFault);
+        Assert.False(viewModel.CanReadWaveform);
         Assert.True(viewModel.CanRead);
 
         viewModel.FaultRecordIndex=0;
         viewModel.FaultDelayMilliseconds=null;
         Assert.Null(viewModel.FaultDelayMilliseconds);
         Assert.False(viewModel.CanReadFault);
+        Assert.False(viewModel.CanReadWaveform);
 
         viewModel.RefreshSeconds=3;
         viewModel.FaultDelayMilliseconds=100;
         Assert.True(viewModel.CanAutoRefresh);
         Assert.True(viewModel.CanReadFault);
+        Assert.True(viewModel.CanReadWaveform);
     }
 
     [Fact]
@@ -167,6 +171,7 @@ public sealed class MainViewModelTests
         Assert.True(axis.ForceStepToMin);
         var separatorPaint=Assert.IsType<SolidColorPaint>(axis.SeparatorsPaint);
         Assert.IsType<DashEffect>(separatorPaint.PathEffect);
+        Assert.Equal("录波时间",axis.Name);
     }
 
     [Fact]
@@ -186,6 +191,25 @@ public sealed class MainViewModelTests
         await Task.Delay(100);
 
         Assert.StartsWith("完整录波读取完成",viewModel.WaveformProgressText);
+    }
+
+    [Fact]
+    public async Task Waveform_read_runs_timestamp_offset_and_waveform_steps_in_that_order()
+    {
+        var calls=new List<string>();
+        await using var viewModel=CreateViewModel(
+            ["COM10"],
+            new AppSettings(PortName:"COM10"),
+            deviceService:new ConnectedDeviceDataService(),
+            faultService:new FakeFaultRecordService(()=>calls.Add("故障时间")),
+            waveformTimeOffsetStore:new FakeWaveformTimeOffsetStore(123,()=>calls.Add("稳定毫秒")),
+            waveformService:new CompletedWaveformDataService(()=>calls.Add("1552和18块")));
+
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+        await viewModel.ReadWaveformCommand.Execute().ToTask();
+
+        Assert.Equal(["故障时间","稳定毫秒","1552和18块"],calls);
     }
 
     [Fact]
@@ -212,6 +236,13 @@ public sealed class MainViewModelTests
         Assert.Contains("20000",viewModel.WaveformSummary);
         Assert.Contains("框III，Rate=2",viewModel.WaveformSummary);
         Assert.DoesNotContain("框架等级 2",viewModel.WaveformSummary);
+        var xAxis=Assert.Single(viewModel.WaveformXAxes);
+        Assert.Equal("14:30:01.123",xAxis.Labeler!(-80));
+        Assert.Equal("14:30:01.243",xAxis.Labeler!(40));
+        Assert.Contains("软件补充 123 ms",viewModel.WaveformSummary);
+        Assert.Contains("非设备实测",viewModel.WaveformSummary);
+        Assert.Contains("录波 2026-07-22 14:30:01.123～14:30:01.1230000",viewModel.WaveformSummary);
+        Assert.NotNull(phaseA.XToolTipLabelFormatter);
 
         viewModel.ShowPhaseB=false;
         viewModel.ShowPhaseC=false;
@@ -245,13 +276,42 @@ public sealed class MainViewModelTests
         Assert.Contains("读取录波数据失败",viewModel.Notice);
     }
 
+    [Fact]
+    public async Task Missing_fault_timestamp_shows_dialog_stops_before_waveform_and_preserves_old_data()
+    {
+        var waveformService=new CountingWaveformDataService();
+        await using var viewModel=CreateViewModel(
+            ["COM10"],
+            new AppSettings(PortName:"COM10"),
+            deviceService:new ConnectedDeviceDataService(),
+            waveformService:waveformService,
+            faultService:new SucceedThenFailTimestampFaultRecordService());
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+        await viewModel.ReadWaveformCommand.Execute().ToTask();
+        var previous=viewModel.CurrentWaveformData;
+        ErrorDialogRequest? dialog=null;
+        viewModel.ErrorDialogRequested+=(_,request)=>dialog=request;
+
+        await viewModel.ReadWaveformCommand.Execute().ToTask();
+
+        Assert.Same(previous,viewModel.CurrentWaveformData);
+        Assert.Equal(1,waveformService.Calls);
+        Assert.Equal("无法读取录波数据",dialog?.Title);
+        Assert.Contains("未读取到有效的故障记录时间",dialog?.Message);
+        Assert.Contains("未读取到有效的故障记录时间",viewModel.WaveformProgressText);
+        Assert.Contains("未读取到有效的故障记录时间",viewModel.Notice);
+    }
+
     private static MainViewModel CreateViewModel(
         IReadOnlyList<string> ports,
         AppSettings settings,
         IModbusRtuClient? client=null,
         IProtocolTrace? trace=null,
         IDeviceDataService? deviceService=null,
-        IWaveformDataService? waveformService=null)
+        IWaveformDataService? waveformService=null,
+        IFaultRecordService? faultService=null,
+        IWaveformTimeOffsetStore? waveformTimeOffsetStore=null)
     {
         client??=new FakeClient();
         trace??=new RecordingProtocolTrace();
@@ -259,8 +319,9 @@ public sealed class MainViewModelTests
             client,
             new FakePortCatalog(ports),
             deviceService ?? new FakeDeviceDataService(),
-            new FakeFaultRecordService(),
+            faultService ?? new FakeFaultRecordService(),
             waveformService ?? new FakeWaveformDataService(),
+            waveformTimeOffsetStore ?? new FakeWaveformTimeOffsetStore(),
             new FakeSettingsService(),
             trace,
             settings);
@@ -317,12 +378,44 @@ public sealed class MainViewModelTests
             Task.FromResult(new DataReadResult(values ?? [],[],DateTimeOffset.Now));
     }
 
-    private sealed class FakeFaultRecordService : IFaultRecordService
+    private sealed class FakeFaultRecordService(Action? timestampRead=null) : IFaultRecordService
     {
         public Task<DataReadResult> ReadAsync(byte slaveAddress,FaultRecordType type,byte recordIndex,
             WordOrder wordOrder,BreakerSeries controllerSeries,TimeSpan readyDelay,
             CancellationToken cancellationToken=default)=>
             Task.FromResult(new DataReadResult([],[],DateTimeOffset.Now));
+
+        public Task<DateTime> ReadTimestampAsync(byte slaveAddress,FaultRecordType type,byte recordIndex,
+            TimeSpan readyDelay,CancellationToken cancellationToken=default)
+        {
+            timestampRead?.Invoke();
+            return Task.FromResult(new DateTime(2026,7,22,14,30,1,DateTimeKind.Unspecified));
+        }
+    }
+
+    private sealed class FakeWaveformTimeOffsetStore(int milliseconds=123,Action? called=null) : IWaveformTimeOffsetStore
+    {
+        public Task<int> GetOrCreateAsync(DateTime faultRecordTime,CancellationToken cancellationToken=default)
+        {
+            called?.Invoke();
+            return Task.FromResult(milliseconds);
+        }
+    }
+
+    private sealed class SucceedThenFailTimestampFaultRecordService : IFaultRecordService
+    {
+        private int _timestampCalls;
+
+        public Task<DataReadResult> ReadAsync(byte slaveAddress,FaultRecordType type,byte recordIndex,
+            WordOrder wordOrder,BreakerSeries controllerSeries,TimeSpan readyDelay,
+            CancellationToken cancellationToken=default)=>
+            Task.FromResult(new DataReadResult([],[],DateTimeOffset.Now));
+
+        public Task<DateTime> ReadTimestampAsync(byte slaveAddress,FaultRecordType type,byte recordIndex,
+            TimeSpan readyDelay,CancellationToken cancellationToken=default)=>
+            _timestampCalls++==0
+                ? Task.FromResult(new DateTime(2026,7,22,14,30,1,DateTimeKind.Unspecified))
+                : Task.FromException<DateTime>(new FormatException("768～770 均为 0000H"));
     }
 
     private sealed class FakeWaveformDataService : IWaveformDataService
@@ -333,12 +426,13 @@ public sealed class MainViewModelTests
             Task.FromException<WaveformData>(new InvalidOperationException("测试未配置录波数据"));
     }
 
-    private sealed class CompletedWaveformDataService : IWaveformDataService
+    private sealed class CompletedWaveformDataService(Action? read=null) : IWaveformDataService
     {
         public Task<WaveformData> ReadAsync(byte slaveAddress,
             IProgress<WaveformReadProgress>? progress=null,
             CancellationToken cancellationToken=default)
         {
+            read?.Invoke();
             var lastBlock=WaveformCatalog.Blocks[WaveformCatalog.TotalBlocks - 1];
             _=Task.Run(async () =>
             {
@@ -361,6 +455,20 @@ public sealed class MainViewModelTests
                 22953,
                 0,
                 WaveformCalibration.FromRegisterValue(0x0204)));
+        }
+    }
+
+    private sealed class CountingWaveformDataService : IWaveformDataService
+    {
+        private readonly CompletedWaveformDataService _inner=new();
+        public int Calls { get; private set; }
+
+        public Task<WaveformData> ReadAsync(byte slaveAddress,
+            IProgress<WaveformReadProgress>? progress=null,
+            CancellationToken cancellationToken=default)
+        {
+            Calls++;
+            return _inner.ReadAsync(slaveAddress,progress,cancellationToken);
         }
     }
 

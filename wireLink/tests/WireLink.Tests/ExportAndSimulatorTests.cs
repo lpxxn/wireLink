@@ -171,7 +171,16 @@ public sealed class ExportAndSimulatorTests
                     (ushort)(WaveformCatalog.GetBlock(segment,WaveformPhase.C).StartAddress+local));
             }).ToArray();
             var calibration=WaveformCalibration.FromRegisterValue(0x0204);
-            var data=new WaveformData(DateTimeOffset.Now,WaveformCatalog.SampleRateHz,points,1.25,2.5,3.75,calibration);
+            var timing=new WaveformTiming(
+                new DateTime(2026,7,22,14,30,1,DateTimeKind.Unspecified),
+                347,
+                FaultRecordType.Fault,
+                1);
+            var data=new WaveformData(
+                DateTimeOffset.Now,WaveformCatalog.SampleRateHz,points,1.25,2.5,3.75,calibration)
+            {
+                Timing=timing,
+            };
 
             await new ClosedXmlExportService().ExportAsync(
                 path,new WaveformExcelExportContext("录波数据",data));
@@ -179,29 +188,45 @@ public sealed class ExportAndSimulatorTests
             using var book=new XLWorkbook(path);
             var analysis=book.Worksheet("波形数据");
             var details=book.Worksheet("读取明细");
-            Assert.Equal("采样序号",analysis.Cell(8,1).GetString());
-            Assert.Equal(392,analysis.LastRowUsed()!.RowNumber());
+            Assert.Equal("采样序号",analysis.Cell(10,1).GetString());
+            Assert.Equal(394,analysis.LastRowUsed()!.RowNumber());
             Assert.Equal(516,analysis.Cell(2,4).GetDouble());
             Assert.Equal("0x0204",analysis.Cell(2,6).GetString());
-            Assert.Equal(2,analysis.Cell(3,4).GetDouble());
+            Assert.Equal("框III",analysis.Cell(3,4).GetString());
             Assert.Equal(2,analysis.Cell(4,4).GetDouble());
             Assert.Equal(20000.0 / 22953.0,analysis.Cell(4,6).GetDouble(),12);
             Assert.Contains("22953.0",analysis.Cell(6,2).GetString());
-            Assert.Equal(-80,analysis.Cell(9,2).GetDouble());
-            Assert.Equal(0,analysis.Cell(9,3).GetDouble());
-            Assert.Equal(calibration.ConvertToAmperes(1000),analysis.Cell(9,4).GetDouble());
-            Assert.Equal(XLDataType.Number,analysis.Cell(9,2).DataType);
-            Assert.Equal(XLDataType.Number,analysis.Cell(9,4).DataType);
+            Assert.Equal("故障 / 第 1 条记录",analysis.Cell(7,2).GetString());
+            Assert.Equal(347,analysis.Cell(7,6).GetDouble());
+            Assert.Equal(XLDataType.DateTime,analysis.Cell(7,4).DataType);
+            Assert.Contains("并非设备实测值",analysis.Cell(8,6).GetString());
+            Assert.Equal(-80,analysis.Cell(11,2).GetDouble());
+            Assert.Equal(timing.WaveformStartTime,analysis.Cell(11,3).GetDateTime());
+            Assert.Equal(0,analysis.Cell(11,4).GetDouble());
+            Assert.Equal(calibration.ConvertToAmperes(1000),analysis.Cell(11,5).GetDouble());
+            Assert.Equal(XLDataType.Number,analysis.Cell(11,2).DataType);
+            Assert.Equal(XLDataType.DateTime,analysis.Cell(11,3).DataType);
+            Assert.Equal(XLDataType.Number,analysis.Cell(11,5).DataType);
+            Assert.Equal("yyyy-mm-dd hh:mm:ss.000",analysis.Cell(11,3).Style.NumberFormat.Format);
+            Assert.Equal("2026-07-22 14:30:01.347",analysis.Cell(11,3).GetFormattedString());
             Assert.Equal("0.0",analysis.Cell(5,2).Style.NumberFormat.Format);
-            Assert.Equal("0.0",analysis.Cell(9,4).Style.NumberFormat.Format);
-            Assert.Equal(1153,details.LastRowUsed()!.RowNumber());
-            Assert.Equal(10,details.LastColumnUsed()!.ColumnNumber());
-            Assert.Equal("0xB000",details.Cell(2,8).GetString());
-            Assert.Equal("0xB5BF",details.Cell(1153,8).GetString());
-            Assert.Equal(-383,details.Cell(1153,9).GetDouble());
-            Assert.Equal(calibration.ConvertToAmperes(-383),details.Cell(1153,10).GetDouble());
-            Assert.Equal(XLDataType.Number,details.Cell(1153,10).DataType);
-            Assert.Equal("0.0",details.Cell(1153,10).Style.NumberFormat.Format);
+            Assert.Equal("0.0",analysis.Cell(11,5).Style.NumberFormat.Format);
+            Assert.Equal(1156,details.LastRowUsed()!.RowNumber());
+            Assert.Equal(11,details.LastColumnUsed()!.ColumnNumber());
+            Assert.Equal("绝对采样时间",details.Cell(4,7).GetString());
+            Assert.Contains("并非设备实测值",details.Cell(3,2).GetString());
+            Assert.Equal(timing.WaveformStartTime,details.Cell(5,7).GetDateTime());
+            Assert.Equal("0xB000",details.Cell(5,9).GetString());
+            Assert.Equal("0xB5BF",details.Cell(1156,9).GetString());
+            Assert.Equal(-383,details.Cell(1156,10).GetDouble());
+            Assert.Equal(calibration.ConvertToAmperes(-383),details.Cell(1156,11).GetDouble());
+            Assert.Equal(XLDataType.DateTime,details.Cell(1156,7).DataType);
+            Assert.Equal(XLDataType.Number,details.Cell(1156,11).DataType);
+            Assert.Equal("yyyy-mm-dd hh:mm:ss.000",details.Cell(1156,7).Style.NumberFormat.Format);
+            Assert.Matches(
+                @"^2026-07-22 14:30:01\.\d{3}$",
+                details.Cell(1156,7).GetFormattedString());
+            Assert.Equal("0.0",details.Cell(1156,11).Style.NumberFormat.Format);
         }
         finally { if(File.Exists(path))File.Delete(path); }
     }

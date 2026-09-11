@@ -246,7 +246,7 @@ Math.Sqrt(...)
 
 代码位置：[WaveformCatalog.cs](../src/WireLink.Core/Registers/WaveformCatalog.cs)。
 
-读取服务先成功读取 1552 标定参数，再在三相 18 个块全部成功后，分别计算 A、B、C 三相 AD-RMS：
+页面先取得有效故障时间和稳定的软件补充毫秒，读取服务再成功读取 1552 标定参数，并在三相 18 个块全部成功后分别计算 A、B、C 三相 AD-RMS：
 
 ```csharp
 WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.A])
@@ -448,7 +448,7 @@ RMS
 5. 任一录波块失败时，不得用零补齐后继续计算 RMS；
 6. 不得把上一次数据与本次部分数据拼接；
 7. 平方累加必须使用 `double` 或足够大的数值类型，不能使用 `int`；
-8. 必须先读取 1552，并只用 bit8～bit11 映射 Rate；等级 3～15 必须报错，不能猜测；
+8. 取得有效故障记录时间和稳定软件毫秒后，必须读取 1552，并只用 bit8～bit11 映射 Rate；等级 3～15 必须报错，不能猜测；
 9. AD→A 必须使用有符号值和 `double`，不能拿 `ushort` 原值换算；完成乘除后按通常四舍五入保留 1 位小数；
 10. 页面应说明当前显示的是整段 384 点安培 RMS，避免被误认为故障后稳态电流；
 11. 实机仍需确认采样率、跨段连续性和快照冻结行为。

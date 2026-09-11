@@ -19,6 +19,14 @@ public interface IFaultRecordService
     Task<DataReadResult> ReadAsync(byte slaveAddress, FaultRecordType type, byte recordIndex,
         WordOrder wordOrder, BreakerSeries controllerSeries, TimeSpan readyDelay,
         CancellationToken cancellationToken = default);
+
+    /// <summary>选择指定记录并只读取 768～770，返回经过完整 BCD 校验的故障记录时间。</summary>
+    Task<DateTime> ReadTimestampAsync(
+        byte slaveAddress,
+        FaultRecordType type,
+        byte recordIndex,
+        TimeSpan readyDelay,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>固定录波区读取服务。只有标定参数和 18 个块全部成功时才返回完整数据。</summary>
@@ -48,6 +56,12 @@ public interface ISettingsService
 {
     Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default);
     Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default);
+}
+
+/// <summary>按故障时间保存软件补充毫秒；相同的秒级故障时间始终返回同一个值。</summary>
+public interface IWaveformTimeOffsetStore
+{
+    Task<int> GetOrCreateAsync(DateTime faultRecordTime, CancellationToken cancellationToken = default);
 }
 
 public sealed record ExcelExportContext(
@@ -138,10 +152,7 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
         WordOrder wordOrder, BreakerSeries controllerSeries, TimeSpan readyDelay,
         CancellationToken cancellationToken = default)
     {
-        if (recordIndex > 15) throw new ArgumentOutOfRangeException(nameof(recordIndex), "第几条记录必须为 0～15。");
-        var selector = (ushort)((recordIndex << 8) | (byte)type);
-        await client.WriteSingleRegisterAsync(slaveAddress, 785, selector, cancellationToken);
-        if (readyDelay > TimeSpan.Zero) await Task.Delay(readyDelay, cancellationToken);
+        await SelectRecordAsync(slaveAddress, type, recordIndex, readyDelay, cancellationToken);
 
         var readAt = DateTimeOffset.Now;
         var samples = new Dictionary<ushort, RawRegisterSample>();
@@ -193,6 +204,38 @@ public sealed class FaultRecordService(IModbusRtuClient client, RegisterParser p
             parser.Parse(RegisterCatalog.FaultDefinitions, samples, wordOrder, type, controllerSeries),
             errors,
             readAt);
+    }
+
+    public async Task<DateTime> ReadTimestampAsync(
+        byte slaveAddress,
+        FaultRecordType type,
+        byte recordIndex,
+        TimeSpan readyDelay,
+        CancellationToken cancellationToken = default)
+    {
+        await SelectRecordAsync(slaveAddress, type, recordIndex, readyDelay, cancellationToken);
+
+        var raw = await client.ReadHoldingRegistersAsync(slaveAddress, 768, 3, cancellationToken);
+        if (raw.Length != 3)
+            throw new ModbusProtocolException($"故障记录时间返回数量错误：期望 3，收到 {raw.Length}。");
+
+        return FaultRecordTimeDecoder.Decode(raw[0], raw[1], raw[2]);
+    }
+
+    private async Task SelectRecordAsync(
+        byte slaveAddress,
+        FaultRecordType type,
+        byte recordIndex,
+        TimeSpan readyDelay,
+        CancellationToken cancellationToken)
+    {
+        if (recordIndex > 15)
+            throw new ArgumentOutOfRangeException(nameof(recordIndex), "第几条记录必须为 0～15。");
+
+        var selector = (ushort)((recordIndex << 8) | (byte)type);
+        await client.WriteSingleRegisterAsync(slaveAddress, 785, selector, cancellationToken);
+        if (readyDelay > TimeSpan.Zero)
+            await Task.Delay(readyDelay, cancellationToken);
     }
 }
 

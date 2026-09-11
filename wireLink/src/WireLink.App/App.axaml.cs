@@ -31,9 +31,10 @@ public partial class App : Application
             var settings = settingsService.LoadAsync().GetAwaiter().GetResult();
             var client = new ModbusRtuClient(new SerialPortTransport(), trace);
             var parser = new RegisterParser(trace);
+            var waveformTimeOffsetStore = new JsonWaveformTimeOffsetStore(trace: trace);
             var viewModel = new MainViewModel(client, new SerialPortCatalog(),
                 new DeviceDataService(client, parser, trace), new FaultRecordService(client, parser),
-                new WaveformDataService(client, trace), settingsService, trace, settings);
+                new WaveformDataService(client, trace), waveformTimeOffsetStore, settingsService, trace, settings);
             ApplyTheme(settings.Theme);
             var mainWindow = new MainWindow(viewModel, client, new ClosedXmlExportService(), logStore);
             desktop.MainWindow = mainWindow;
