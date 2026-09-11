@@ -8,9 +8,16 @@ namespace WireLink.Core.Services;
 /// <summary>设备数据读取服务。每个不连续区间独立读取，允许部分成功。</summary>
 public interface IDeviceDataService
 {
-    Task<bool> TestConnectionAsync(byte slaveAddress, CancellationToken cancellationToken = default);
-    Task<DataReadResult> ReadAsync(byte slaveAddress, WordOrder wordOrder, BreakerSeries controllerSeries,
+    Task<bool> TestConnectionAsync(byte slaveAddress, DeviceType deviceType,
         CancellationToken cancellationToken = default);
+    Task<DataReadResult> ReadAsync(byte slaveAddress, DeviceType deviceType,
+        WordOrder wordOrder, BreakerSeries controllerSeries,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IProtectionDataService
+{
+    Task<DataReadResult> ReadAsync(byte slaveAddress, CancellationToken cancellationToken = default);
 }
 
 /// <summary>历史故障记录读取服务。</summary>
@@ -50,7 +57,8 @@ public sealed record AppSettings(
     WordOrder WordOrder = WordOrder.HighWordFirst,
     int ReadTimeoutMilliseconds = 2000,
     int FaultReadyDelayMilliseconds = 1000,
-    BreakerSeries ControllerSeries = BreakerSeries.BW1);
+    BreakerSeries ControllerSeries = BreakerSeries.BW1,
+    DeviceType DeviceType = DeviceType.FrameController);
 
 public interface ISettingsService
 {
@@ -101,28 +109,65 @@ public sealed class DeviceDataService(IModbusRtuClient client, RegisterParser pa
 {
     private readonly IProtocolTrace _trace = trace ?? NullProtocolTrace.Instance;
 
-    public async Task<bool> TestConnectionAsync(byte slaveAddress, CancellationToken cancellationToken = default)
+    public async Task<bool> TestConnectionAsync(byte slaveAddress, DeviceType deviceType,
+        CancellationToken cancellationToken = default)
     {
-        var values = await client.ReadHoldingRegistersAsync(slaveAddress, 256, 1, cancellationToken);
+        var profile = DeviceProfileCatalog.Get(deviceType);
+        var values = await client.ReadHoldingRegistersAsync(
+            slaveAddress, profile.ProbeRegister, 1, cancellationToken);
         return values.Length == 1;
     }
 
-    public async Task<DataReadResult> ReadAsync(byte slaveAddress, WordOrder wordOrder,
+    public Task<DataReadResult> ReadAsync(byte slaveAddress, DeviceType deviceType, WordOrder wordOrder,
         BreakerSeries controllerSeries,
         CancellationToken cancellationToken = default)
+    {
+        var page = DeviceProfileCatalog.Get(deviceType).DeviceData;
+        return RegisterPageReader.ReadAsync(
+            client, parser, _trace, slaveAddress, page, wordOrder, controllerSeries, cancellationToken);
+    }
+}
+
+public sealed class ProtectionDataService(IModbusRtuClient client, RegisterParser parser, IProtocolTrace? trace = null)
+    : IProtectionDataService
+{
+    private readonly IProtocolTrace _trace = trace ?? NullProtocolTrace.Instance;
+
+    public Task<DataReadResult> ReadAsync(byte slaveAddress, CancellationToken cancellationToken = default)
+    {
+        var page = DeviceProfileCatalog.MoldedCaseCircuitBreaker.ProtectionData
+            ?? throw new InvalidOperationException("塑壳断路器保护数据目录未配置。");
+        return RegisterPageReader.ReadAsync(
+            client, parser, _trace, slaveAddress, page, WordOrder.HighWordFirst,
+            BreakerSeries.BW1, cancellationToken);
+    }
+}
+
+internal static class RegisterPageReader
+{
+    public static async Task<DataReadResult> ReadAsync(
+        IModbusRtuClient client,
+        RegisterParser parser,
+        IProtocolTrace trace,
+        byte slaveAddress,
+        RegisterPageProfile page,
+        WordOrder wordOrder,
+        BreakerSeries controllerSeries,
+        CancellationToken cancellationToken)
     {
         var samples = new Dictionary<ushort, RawRegisterSample>();
         var errors = new List<string>();
         var readAt = DateTimeOffset.Now;
 
-        // 先读取隐藏的额定电流配置，使随后成功的电流区间可以立即使用 1552.bit0～bit7 计算。
-        var blocks = RegisterCatalog.DeviceBlocks.OrderByDescending(
+        // 框架控制器先读取隐藏的额定电流配置；其他页面保持目录中的块顺序。
+        var blocks = page.Blocks.OrderByDescending(
             block => block.StartAddress == RegisterCatalog.RatedCurrentRegisterAddress);
         foreach (var block in blocks)
         {
             try
             {
-                var values = await client.ReadHoldingRegistersAsync(slaveAddress, block.StartAddress, block.Count, cancellationToken);
+                var values = await client.ReadHoldingRegistersAsync(
+                    slaveAddress, block.StartAddress, block.Count, cancellationToken);
                 var timestamp = DateTimeOffset.Now;
                 for (var index = 0; index < values.Length; index++)
                 {
@@ -135,12 +180,12 @@ public sealed class DeviceDataService(IModbusRtuClient client, RegisterParser pa
             {
                 var error = $"读取 {block.StartAddress}～{block.EndAddress} 失败：{ex.Message}";
                 errors.Add(error);
-                _trace.Warning(error);
+                trace.Warning(error);
             }
         }
 
         return new DataReadResult(
-            parser.Parse(RegisterCatalog.DeviceDefinitions, samples, wordOrder, controllerSeries: controllerSeries),
+            parser.Parse(page.Definitions, samples, wordOrder, controllerSeries: controllerSeries),
             errors,
             readAt);
     }

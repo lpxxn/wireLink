@@ -53,6 +53,21 @@ public sealed class RegisterParser
         var values = new List<DecodedValue>(definitions.Count);
         foreach (var definition in definitions)
         {
+            if (!definition.IsReadable)
+            {
+                values.Add(new DecodedValue(
+                    definition.Name,
+                    definition.Addresses,
+                    definition.FixedValue ?? string.Empty,
+                    definition.Unit,
+                    definition.FormatDescription,
+                    [],
+                    ParseStatus.Success,
+                    null,
+                    samples.Values.Select(sample => sample.ReadAt).DefaultIfEmpty(DateTimeOffset.Now).Max()));
+                continue;
+            }
+
             var raw = definition.Addresses
                 .Where(samples.ContainsKey)
                 .Select(address => samples[address])
@@ -104,6 +119,12 @@ public sealed class RegisterParser
                 ValueTransform.BcdMinuteSecond => DecodeBcdPair((ushort)numeric, "分", "秒", 0),
                 ValueTransform.FaultRecordStatus => (DecodeRecordStatus((ushort)numeric), "按 5.6 位字段解析", ParseStatus.Success, null),
                 ValueTransform.RecordSelector => (DecodeSelector((ushort)numeric), "L=记录类型，H=第几条记录", ParseStatus.Success, null),
+                ValueTransform.MoldedCasePhase => DecodeMoldedCasePhase(numeric),
+                ValueTransform.MoldedCaseFaultType => DecodeMoldedCaseFaultType(numeric),
+                ValueTransform.MoldedCaseLongDelayTime => DecodeMoldedCaseLongDelayTime(numeric),
+                ValueTransform.MoldedCaseShortDelayTime => DecodeMoldedCaseShortDelayTime(numeric),
+                ValueTransform.MoldedCaseGroundTime => DecodeMoldedCaseGroundTime(numeric),
+                ValueTransform.MoldedCasePreAlarmTime => DecodeMoldedCasePreAlarmTime(numeric),
                 _ => throw new ArgumentOutOfRangeException(),
             };
 
@@ -234,6 +255,91 @@ public sealed class RegisterParser
     {
         return (raw.ToString(CultureInfo.InvariantCulture), "百分比原值直接显示", ParseStatus.Success, null);
     }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCasePhase(uint raw)
+    {
+        var phase = raw switch
+        {
+            0 => "A相",
+            1 => "B相",
+            2 => "C相",
+            3 => "N相",
+            _ => null,
+        };
+        return phase is not null
+            ? (phase, $"相别编码 {raw}", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "相别");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCaseFaultType(uint raw)
+    {
+        var faultType = raw switch
+        {
+            0 => "无故障",
+            1 => "瞬时故障",
+            2 => "漏电故障",
+            4 => "接地故障",
+            8 => "短延时故障",
+            16 => "长延时故障",
+            32 or 33 or 34 or 36 or 40 or 48 => "故障未读取",
+            _ => null,
+        };
+        return faultType is not null
+            ? (faultType, $"故障类型编码 {raw}", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "故障类型");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCaseLongDelayTime(uint raw)
+    {
+        if (raw == 0) return ("OFF", "0=OFF", ParseStatus.Success, null);
+        return raw <= 150
+            ? ($"{raw} s", $"设定值 {raw}=时间 {raw} s", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "长延时时间");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCaseShortDelayTime(uint raw)
+    {
+        var value = raw switch
+        {
+            0 => "OFF",
+            3 => "0.06 s",
+            5 => "0.1 s",
+            10 => "0.2 s",
+            15 => "0.3 s",
+            _ => null,
+        };
+        return value is not null
+            ? (value, $"按短延时时间表映射原值 {raw}", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "短延时时间");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCaseGroundTime(uint raw)
+    {
+        if (raw <= 7)
+        {
+            var seconds = (raw + 1) / 10m;
+            return ($"{seconds.ToString("0.0", CultureInfo.InvariantCulture)} s",
+                $"按接地时间表映射原值 {raw}", ParseStatus.Success, null);
+        }
+        return raw == 8
+            ? ("报警", "接地时间原值 8=报警", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "接地时间");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCasePreAlarmTime(uint raw)
+    {
+        if (raw <= 9)
+        {
+            var seconds = (raw + 1) / 10m;
+            return ($"{seconds.ToString("0.0", CultureInfo.InvariantCulture)} s",
+                $"按预报警时间表映射原值 {raw}", ParseStatus.Success, null);
+        }
+        return UnknownMoldedCaseValue(raw, "预报警时间");
+    }
+
+    private static (string, string, ParseStatus, string?) UnknownMoldedCaseValue(uint raw, string field) =>
+        (raw.ToString(CultureInfo.InvariantCulture), "协议未定义，保留十进制原始值",
+            ParseStatus.ProtocolUnconfirmed, $"协议未定义{field}原值 {raw}");
 
     /// <summary>
     /// 报警事件按已确认的 5.5.2 规则只有数据 0 有效：

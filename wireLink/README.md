@@ -1,6 +1,6 @@
 # WireLink
 
-WireLink 是面向 USB 转 RS485 设备的跨平台 Modbus RTU 读取、解析、展示和 Excel 导出工具。当前支持设备数据、历史故障记录，以及固定录波区的三相曲线与 Excel 导出。
+WireLink 是面向 USB 转 RS485 设备的跨平台 Modbus RTU 读取、解析、展示和 Excel 导出工具。当前支持框架控制器和塑壳断路器；框架控制器提供设备、历史故障和录波数据，塑壳断路器提供设备与保护数据。
 
 ## 快速开始
 
@@ -13,7 +13,7 @@ dotnet test tests/WireLink.Tests/WireLink.Tests.csproj
 dotnet run --project src/WireLink.App/WireLink.App.csproj
 ```
 
-操作顺序：选择或输入串口 → 选择波特率 → 打开串口 → 输入设备地址并选择 BW1/BW3 控制器 → 连接测试 → 读取设备/故障/录波数据。程序恢复上次设置，但不会自动打开串口。
+操作顺序：选择设备类型、串口和波特率 → 打开串口 → 输入设备地址 → 连接测试 → 读取该设备支持的数据。切换设备类型会保留已打开的串口，但会停止刷新、清空旧数据并要求重新连接测试。程序恢复上次设置，但不会自动打开串口。
 
 macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed by system policy`，请按 [发布与签名](docs/release.md) 的调试签名段处理。
 
@@ -21,6 +21,7 @@ macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed b
 
 - 已实现：端口动态枚举和手动输入、8N1 串口、03H、06H、CRC、超时/CRC 重试一次、异常响应、请求串行化、分区读取和部分失败保留。
 - 已实现：设备与故障四列双组表、自动刷新、连续失败停止、浅/深/系统主题、固定 uint32 高字优先解析、Excel 导出。
+- 已实现：塑壳断路器设备/保护数据、设备类型切换、设备专属连接探测地址，以及 2400/4800 BPS。
 - 已实现：F12 非模态日志窗、Debug 原始帧与逐字段公式、滚动文件日志、JSON 设置。
 - 已实现：独立虚拟串口模拟器及超时、CRC、异常码注入。
 - 已实现：先选择当前故障记录并读取 768～770 的有效 BCD 时间，再读取 1552 框架等级和 18 块固定录波；秒级故障时间会绑定一个持久化的软件补充毫秒，主图和主 Excel 使用绝对时间轴并明确其来源。录波按厂商公式换算三相安培曲线和 A-RMS；Shift+F8 仍提供相对时间、有符号 AD、uint16 原值、源地址和原始值曲线；PDF 全部 18 个响应帧用于模拟与回归测试。
@@ -31,6 +32,7 @@ macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed b
 - [开发计划](docs/development-plan.md)
 - [架构与维护](docs/architecture.md)
 - [协议解析与未确认规则](docs/protocol.md)
+- [塑壳断路器协议实现](docs/molded-case-circuit-breaker.md)
 - [故障录波协议解析](docs/waveform-protocol.md)
 - [录波 RMS 公式与解析代码说明](docs/waveform-rms-explained.md)
 - [录波功能实现计划](docs/waveform-implementation-plan.md)

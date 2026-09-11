@@ -22,6 +22,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private readonly IModbusRtuClient _client;
     private readonly ISerialPortCatalog _ports;
     private readonly IDeviceDataService _deviceService;
+    private readonly IProtectionDataService _protectionService;
     private readonly IFaultRecordService _faultService;
     private readonly IWaveformDataService _waveformService;
     private readonly IWaveformTimeOffsetStore _waveformTimeOffsetStore;
@@ -44,10 +45,12 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _notice = string.Empty;
     private AppThemeMode _theme;
     private string _controllerName;
+    private DeviceTypeOption _selectedDevice;
     private FaultRecordTypeOption _selectedFaultRecordType;
     private int? _faultRecordIndex = 1;
     private DateTimeOffset _deviceReadAt;
     private DateTimeOffset _faultReadAt;
+    private DateTimeOffset _protectionReadAt;
     private FaultRecordType _lastReadFaultRecordType;
     private byte _lastReadFaultRecordIndex;
     private WaveformData? _waveformData;
@@ -56,43 +59,52 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private bool _showPhaseA = true;
     private bool _showPhaseB = true;
     private bool _showPhaseC = true;
+    private int _selectedDataTabIndex;
     private readonly LineSeries<ObservablePoint> _phaseASeries = CreateWaveformSeries("A 相");
     private readonly LineSeries<ObservablePoint> _phaseBSeries = CreateWaveformSeries("B 相");
     private readonly LineSeries<ObservablePoint> _phaseCSeries = CreateWaveformSeries("C 相");
 
     public MainViewModel(IModbusRtuClient client, ISerialPortCatalog ports, IDeviceDataService deviceService,
-        IFaultRecordService faultService, IWaveformDataService waveformService,
+        IProtectionDataService protectionService, IFaultRecordService faultService, IWaveformDataService waveformService,
         IWaveformTimeOffsetStore waveformTimeOffsetStore,
         ISettingsService settingsService, IProtocolTrace trace, AppSettings settings)
     {
-        _client = client; _ports = ports; _deviceService = deviceService; _faultService = faultService;
+        _client = client; _ports = ports; _deviceService = deviceService; _protectionService = protectionService;
+        _faultService = faultService;
         _waveformService = waveformService; _waveformTimeOffsetStore = waveformTimeOffsetStore;
         _settingsService = settingsService; _trace = trace;
         _portName = settings.PortName; _baudRate = settings.BaudRate; _deviceAddress = settings.DeviceAddress;
         _refreshSeconds = settings.RefreshSeconds; _theme = settings.Theme;
         _controllerName = settings.ControllerSeries == BreakerSeries.BW3 ? "BW3 的控制器" : "BW1 的控制器";
+        _selectedDevice = DeviceOptions.Single(option => option.Value == settings.DeviceType);
         _selectedFaultRecordType = FaultRecordTypes[0];
         _readTimeoutMilliseconds = settings.ReadTimeoutMilliseconds; _faultDelayMilliseconds = settings.FaultReadyDelayMilliseconds;
         RefreshPortsCommand = ReactiveCommand.Create(RefreshPorts);
         ToggleSerialCommand = ReactiveCommand.CreateFromTask(ToggleSerialAsync);
         TestConnectionCommand = ReactiveCommand.CreateFromTask(TestConnectionAsync);
         ReadDeviceCommand = ReactiveCommand.CreateFromTask(ReadDeviceAsync);
+        ReadProtectionCommand = ReactiveCommand.CreateFromTask(ReadProtectionAsync);
         ReadFaultCommand = ReactiveCommand.CreateFromTask(ReadFaultAsync);
         ReadWaveformCommand = ReactiveCommand.CreateFromTask(ReadWaveformAsync);
         ExportDeviceCommand = ReactiveCommand.Create(RequestDeviceExport);
+        ExportProtectionCommand = ReactiveCommand.Create(RequestProtectionExport);
         ExportFaultCommand = ReactiveCommand.Create(RequestFaultExport);
         ExportWaveformCommand = ReactiveCommand.Create(RequestWaveformExport);
         ShowLogCommand = ReactiveCommand.Create(() => ShowLogRequested?.Invoke(this, EventArgs.Empty));
         RefreshPorts();
-        Merge(DeviceRows, CreatePlaceholders(RegisterCatalog.DeviceDefinitions), null);
-        Merge(FaultRows, CreatePlaceholders(RegisterCatalog.FaultDefinitions), null);
+        InitializeDeviceRows();
         RefreshWaveformSeries();
     }
 
     public ObservableCollection<string> PortNames { get; } = [];
-    public IReadOnlyList<int> BaudRates { get; } = [9600, 19200, 38400, 115200];
+    public IReadOnlyList<int> BaudRates { get; } = [2400, 4800, 9600, 19200, 38400, 115200];
     public IReadOnlyList<AppThemeMode> Themes { get; } = Enum.GetValues<AppThemeMode>();
     public IReadOnlyList<string> ControllerOptions { get; } = ["BW1 的控制器", "BW3 的控制器"];
+    public IReadOnlyList<DeviceTypeOption> DeviceOptions { get; } =
+    [
+        new(DeviceType.FrameController, "框架控制器"),
+        new(DeviceType.MoldedCaseCircuitBreaker, "塑壳断路器"),
+    ];
     public IReadOnlyList<FaultRecordTypeOption> FaultRecordTypes { get; } =
     [
         new(FaultRecordType.Fault,"故障"),
@@ -100,6 +112,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         new(FaultRecordType.StateChange,"变位"),
     ];
     public ObservableCollection<DataRowViewModel> DeviceRows { get; } = [];
+    public ObservableCollection<DataRowViewModel> ProtectionRows { get; } = [];
     public ObservableCollection<DataRowViewModel> FaultRows { get; } = [];
     public ObservableCollection<ISeries> WaveformSeries { get; } = [];
     public Axis[] WaveformXAxes { get; } =
@@ -127,9 +140,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ToggleSerialCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> TestConnectionCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ReadDeviceCommand { get; }
+    public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ReadProtectionCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ReadFaultCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ReadWaveformCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ExportDeviceCommand { get; }
+    public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ExportProtectionCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ExportFaultCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ExportWaveformCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ShowLogCommand { get; }
@@ -223,6 +238,26 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         get => _controllerName;
         set { this.RaiseAndSetIfChanged(ref _controllerName, value); _ = SaveSettingsAsync(); }
     }
+    public DeviceTypeOption SelectedDevice
+    {
+        get => _selectedDevice;
+        set
+        {
+            if (value is null || value == _selectedDevice || IsBusy) return;
+            this.RaiseAndSetIfChanged(ref _selectedDevice, value);
+            HandleDeviceTypeChanged();
+            _ = SaveSettingsAsync();
+        }
+    }
+    public DeviceType SelectedDeviceType => SelectedDevice.Value;
+    public bool IsFrameController => SelectedDeviceType == DeviceType.FrameController;
+    public bool IsMoldedCaseCircuitBreaker => SelectedDeviceType == DeviceType.MoldedCaseCircuitBreaker;
+    public bool CanSelectDeviceType => !IsBusy;
+    public int SelectedDataTabIndex
+    {
+        get => _selectedDataTabIndex;
+        set => this.RaiseAndSetIfChanged(ref _selectedDataTabIndex, value);
+    }
     private BreakerSeries SelectedControllerSeries =>
         ControllerName == "BW3 的控制器" ? BreakerSeries.BW3 : BreakerSeries.BW1;
     public AppThemeMode Theme { get => _theme; set { this.RaiseAndSetIfChanged(ref _theme, value); ThemeChanged?.Invoke(this, value); _ = SaveSettingsAsync(); } }
@@ -251,11 +286,13 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanTest => IsSerialOpen && !IsBusy && DeviceAddress is not null;
     public bool CanRead => IsDeviceConnected && !IsBusy && DeviceAddress is not null;
     public bool CanAutoRefresh => CanRead && RefreshSeconds is not null;
-    public bool CanReadFault => CanRead && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
-    public bool CanReadWaveform => CanRead && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
+    public bool CanReadProtection => CanRead && IsMoldedCaseCircuitBreaker;
+    public bool CanReadFault => CanRead && IsFrameController && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
+    public bool CanReadWaveform => CanRead && IsFrameController && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
     public bool CanExportDevice => _deviceReadAt != default && IsDeviceConnected && !IsBusy;
-    public bool CanExportFault => _faultReadAt != default && IsDeviceConnected && !IsBusy;
-    public bool CanExportWaveform => _waveformData is not null && IsDeviceConnected && !IsBusy;
+    public bool CanExportProtection => _protectionReadAt != default && IsDeviceConnected && !IsBusy && IsMoldedCaseCircuitBreaker;
+    public bool CanExportFault => _faultReadAt != default && IsDeviceConnected && !IsBusy && IsFrameController;
+    public bool CanExportWaveform => _waveformData is not null && IsDeviceConnected && !IsBusy && IsFrameController;
     public WaveformData? CurrentWaveformData => _waveformData;
     public bool HasWaveformData => _waveformData is not null;
     public bool HasNoWaveformData => _waveformData is null;
@@ -352,7 +389,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         await RunBusyAsync(async token =>
         {
-            if (await _deviceService.TestConnectionAsync((byte)address, token))
+            if (await _deviceService.TestConnectionAsync((byte)address, SelectedDeviceType, token))
             {
                 IsDeviceConnected = true; _consecutiveFailures = 0;
                 Notice = $"设备 {address} 连接测试成功"; await SaveSettingsAsync();
@@ -372,10 +409,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await RunBusyAsync(async token =>
         {
             var result = await _deviceService.ReadAsync(
-                (byte)address, WordOrder.HighWordFirst, SelectedControllerSeries, token);
+                (byte)address, SelectedDeviceType, WordOrder.HighWordFirst, SelectedControllerSeries, token);
+            var definitions = DeviceProfileCatalog.Get(SelectedDeviceType).DeviceData.Definitions;
             Merge(
                 DeviceRows,
-                ForTable(result.Values, RegisterCatalog.DeviceDefinitions),
+                ForTable(result.Values, definitions),
                 result.Errors.Count > 0 ? "本区间读取失败，显示上次成功值" : null);
             _deviceReadAt = result.ReadAt;
             if (result.Errors.Count > 0)
@@ -385,6 +423,24 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
             else { _consecutiveFailures = 0; Notice = $"设备数据已更新 {result.ReadAt:HH:mm:ss}"; }
         }, "读取设备数据失败", countFailure: true);
+    }
+
+    private async Task ReadProtectionAsync()
+    {
+        if (!CanReadProtection || DeviceAddress is not int address) return;
+        await RunBusyAsync(async token =>
+        {
+            var result = await _protectionService.ReadAsync((byte)address, token);
+            var definitions = DeviceProfileCatalog.MoldedCaseCircuitBreaker.ProtectionData!.Definitions;
+            Merge(
+                ProtectionRows,
+                ForTable(result.Values, definitions),
+                result.Errors.Count > 0 ? "本区间读取失败，显示上次成功值" : null);
+            _protectionReadAt = result.ReadAt;
+            Notice = result.Errors.Count == 0
+                ? $"保护数据已更新 {result.ReadAt:HH:mm:ss}"
+                : $"保护数据部分读取失败：{result.Errors[0]}";
+        }, "读取保护数据失败");
     }
 
     private async Task ReadFaultAsync()
@@ -546,6 +602,46 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RaiseState();
     }
 
+    private void HandleDeviceTypeChanged()
+    {
+        AutoRefresh = false;
+        IsDeviceConnected = false;
+        _consecutiveFailures = 0;
+        _deviceReadAt = default;
+        _protectionReadAt = default;
+        _faultReadAt = default;
+        _waveformData = null;
+        _phaseASeries.Values = Array.Empty<ObservablePoint>();
+        _phaseBSeries.Values = Array.Empty<ObservablePoint>();
+        _phaseCSeries.Values = Array.Empty<ObservablePoint>();
+        WaveformProgressText = "尚未读取完整录波数据";
+        WaveformSummary = "采样率、点数和 RMS 将在完整读取后显示";
+        InitializeDeviceRows();
+        SelectedDataTabIndex = 0;
+        this.RaisePropertyChanged(nameof(SelectedDeviceType));
+        this.RaisePropertyChanged(nameof(IsFrameController));
+        this.RaisePropertyChanged(nameof(IsMoldedCaseCircuitBreaker));
+        this.RaisePropertyChanged(nameof(CurrentWaveformData));
+        this.RaisePropertyChanged(nameof(HasWaveformData));
+        this.RaisePropertyChanged(nameof(HasNoWaveformData));
+        Notice = $"已切换为{SelectedDevice.DisplayName}，串口保持当前状态，请重新进行连接测试";
+        RaiseState();
+    }
+
+    private void InitializeDeviceRows()
+    {
+        DeviceRows.Clear();
+        ProtectionRows.Clear();
+        FaultRows.Clear();
+
+        var profile = DeviceProfileCatalog.Get(SelectedDeviceType);
+        Merge(DeviceRows, CreatePlaceholders(profile.DeviceData.Definitions), null);
+        if (profile.ProtectionData is not null)
+            Merge(ProtectionRows, CreatePlaceholders(profile.ProtectionData.Definitions), null);
+        if (IsFrameController)
+            Merge(FaultRows, CreatePlaceholders(RegisterCatalog.FaultDefinitions), null);
+    }
+
     private void RestartAutoRefresh()
     {
         _autoRefreshCancellation?.Cancel(); _autoRefreshCancellation?.Dispose(); _autoRefreshCancellation = null;
@@ -561,7 +657,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }, token);
     }
 
-    private void RequestDeviceExport() { if (CanExportDevice) ExportRequested?.Invoke(this, new ExportRequest("设备数据", Flatten(DeviceRows), _deviceReadAt)); }
+    private void RequestDeviceExport()
+    {
+        if (CanExportDevice)
+            ExportRequested?.Invoke(this, new ExportRequest(
+                IsFrameController ? "设备数据" : "塑壳断路器设备数据",
+                Flatten(DeviceRows), _deviceReadAt));
+    }
+    private void RequestProtectionExport()
+    {
+        if (CanExportProtection)
+            ExportRequested?.Invoke(this, new ExportRequest(
+                "塑壳断路器保护数据", Flatten(ProtectionRows), _protectionReadAt));
+    }
     private void RequestFaultExport()
     {
         if (CanExportFault)
@@ -583,7 +691,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private static IReadOnlyList<DecodedValue> Flatten(IEnumerable<DataRowViewModel> rows) => rows.SelectMany(r => new[] { r.Left, r.Right }.OfType<DataItemViewModel>()).Select(x => x.Value).ToArray();
     private static IReadOnlyList<DecodedValue> CreatePlaceholders(IEnumerable<RegisterDefinition> definitions) => definitions
         .Where(definition => definition.ShowInTable)
-        .Select(definition => new DecodedValue(definition.Name, definition.Addresses, "—", definition.Unit, "尚未读取", [], ParseStatus.ReadFailed, "尚未读取", DateTimeOffset.MinValue))
+        .Select(definition => definition.IsReadable
+            ? new DecodedValue(definition.Name, definition.Addresses, "—", definition.Unit, "尚未读取", [], ParseStatus.ReadFailed, "尚未读取", DateTimeOffset.MinValue)
+            : new DecodedValue(definition.Name, definition.Addresses, definition.FixedValue ?? string.Empty,
+                definition.Unit, definition.FormatDescription, [], ParseStatus.Success, null, DateTimeOffset.MinValue))
         .ToArray();
     private static IReadOnlyList<DecodedValue> ForTable(
         IReadOnlyList<DecodedValue> values,
@@ -605,7 +716,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         return _settingsService.SaveAsync(new AppSettings(
             PortName, BaudRate, (byte)deviceAddress, refreshSeconds, Theme, WordOrder.HighWordFirst,
-            readTimeoutMilliseconds, faultDelayMilliseconds, SelectedControllerSeries));
+            readTimeoutMilliseconds, faultDelayMilliseconds, SelectedControllerSeries, SelectedDeviceType));
     }
     private void SetAddressRequired(bool value)
     {
@@ -616,7 +727,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
     private void RaiseState()
     {
-        foreach (var name in new[] { nameof(SerialButtonText), nameof(SerialStatusText), nameof(DeviceStatusText), nameof(SerialStatusBrush), nameof(DeviceStatusBrush), nameof(CanConfigureSerial), nameof(CanToggleSerial), nameof(CanTest), nameof(CanRead), nameof(CanAutoRefresh), nameof(CanReadFault), nameof(CanReadWaveform), nameof(CanExportDevice), nameof(CanExportFault), nameof(CanExportWaveform) }) this.RaisePropertyChanged(name);
+        foreach (var name in new[] { nameof(SerialButtonText), nameof(SerialStatusText), nameof(DeviceStatusText), nameof(SerialStatusBrush), nameof(DeviceStatusBrush), nameof(CanConfigureSerial), nameof(CanToggleSerial), nameof(CanTest), nameof(CanRead), nameof(CanAutoRefresh), nameof(CanSelectDeviceType), nameof(CanReadProtection), nameof(CanReadFault), nameof(CanReadWaveform), nameof(CanExportDevice), nameof(CanExportProtection), nameof(CanExportFault), nameof(CanExportWaveform) }) this.RaisePropertyChanged(name);
     }
 
     private static LineSeries<ObservablePoint> CreateWaveformSeries(string name) => new()
