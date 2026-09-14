@@ -303,15 +303,104 @@ public sealed class MainViewModelTests
         Assert.Contains("未读取到有效的故障记录时间",viewModel.Notice);
     }
 
+    [Fact]
+    public async Task Switching_connected_device_type_keeps_serial_open_and_requires_new_connection_test()
+    {
+        var deviceService=new RecordingDeviceDataService();
+        await using var viewModel=CreateViewModel(
+            ["COM10"],new AppSettings(PortName:"COM10"),deviceService:deviceService);
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+        viewModel.AutoRefresh=true;
+        viewModel.SelectedDataTabIndex=2;
+
+        viewModel.SelectedDevice=viewModel.DeviceOptions.Single(
+            option=>option.Value==DeviceType.MoldedCaseCircuitBreaker);
+
+        Assert.True(viewModel.IsSerialOpen);
+        Assert.False(viewModel.IsDeviceConnected);
+        Assert.False(viewModel.AutoRefresh);
+        Assert.Equal(0,viewModel.SelectedDataTabIndex);
+        Assert.Equal([DeviceType.FrameController],deviceService.TestedTypes);
+        Assert.True(viewModel.IsMoldedCaseCircuitBreaker);
+        Assert.False(viewModel.IsFrameController);
+        Assert.Empty(viewModel.FaultRows);
+        Assert.Contains(viewModel.DeviceRows.SelectMany(RowItems),item=>item.Name=="A 相电流");
+        var reserved=Assert.Single(viewModel.ProtectionRows.SelectMany(RowItems),
+            item=>item.Name=="漏电电流（未用）");
+        Assert.Equal("0",reserved.DisplayValue);
+        Assert.Contains("请重新进行连接测试",viewModel.Notice);
+    }
+
+    [Fact]
+    public async Task Molded_case_settings_restore_tabs_and_protection_read_route()
+    {
+        var protectionService=new RecordingProtectionDataService();
+        var settingsService=new RecordingSettingsService();
+        await using var viewModel=CreateViewModel(
+            ["COM10"],
+            new AppSettings(PortName:"COM10",DeviceType:DeviceType.MoldedCaseCircuitBreaker),
+            deviceService:new ConnectedDeviceDataService(),
+            protectionService:protectionService,
+            settingsService:settingsService);
+
+        Assert.True(viewModel.IsMoldedCaseCircuitBreaker);
+        Assert.Empty(viewModel.FaultRows);
+        Assert.Contains(2400,viewModel.BaudRates);
+        Assert.Contains(4800,viewModel.BaudRates);
+
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+        await viewModel.ReadProtectionCommand.Execute().ToTask();
+
+        Assert.Equal(1,protectionService.Calls);
+        Assert.True(viewModel.CanExportProtection);
+        Assert.Equal("100 A",viewModel.ProtectionRows.SelectMany(RowItems)
+            .Single(item=>item.Name=="长延时电流设定值 Ir1").DisplayValue);
+
+        viewModel.SelectedDevice=viewModel.DeviceOptions.Single(
+            option=>option.Value==DeviceType.FrameController);
+        await Task.Yield();
+        Assert.Equal(DeviceType.FrameController,settingsService.LastSaved?.DeviceType);
+    }
+
+    [Fact]
+    public async Task Address_scanner_uses_probe_register_for_selected_device_type()
+    {
+        var client=new ProbeRecordingClient();
+        await using var viewModel=CreateViewModel(
+            ["COM10"],
+            new AppSettings(PortName:"COM10",DeviceType:DeviceType.MoldedCaseCircuitBreaker),
+            client:client);
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        using var scanner=new SlaveAddressScannerViewModel(client,viewModel)
+        {
+            FromAddress=1,
+            ToAddress=1,
+        };
+
+        await scanner.ScanCommand.Execute().ToTask();
+        viewModel.SelectedDevice=viewModel.DeviceOptions.Single(
+            option=>option.Value==DeviceType.FrameController);
+        await scanner.ScanCommand.Execute().ToTask();
+
+        Assert.Equal([(ushort)0x0001,(ushort)0x0100],client.ReadStarts);
+    }
+
+    private static IEnumerable<DataItemViewModel> RowItems(DataRowViewModel row) =>
+        new[] { row.Left, row.Right }.OfType<DataItemViewModel>();
+
     private static MainViewModel CreateViewModel(
         IReadOnlyList<string> ports,
         AppSettings settings,
         IModbusRtuClient? client=null,
         IProtocolTrace? trace=null,
         IDeviceDataService? deviceService=null,
+        IProtectionDataService? protectionService=null,
         IWaveformDataService? waveformService=null,
         IFaultRecordService? faultService=null,
-        IWaveformTimeOffsetStore? waveformTimeOffsetStore=null)
+        IWaveformTimeOffsetStore? waveformTimeOffsetStore=null,
+        ISettingsService? settingsService=null)
     {
         client??=new FakeClient();
         trace??=new RecordingProtocolTrace();
@@ -319,10 +408,11 @@ public sealed class MainViewModelTests
             client,
             new FakePortCatalog(ports),
             deviceService ?? new FakeDeviceDataService(),
+            protectionService ?? new FakeProtectionDataService(),
             faultService ?? new FakeFaultRecordService(),
             waveformService ?? new FakeWaveformDataService(),
             waveformTimeOffsetStore ?? new FakeWaveformTimeOffsetStore(),
-            new FakeSettingsService(),
+            settingsService ?? new FakeSettingsService(),
             trace,
             settings);
     }
@@ -358,24 +448,87 @@ public sealed class MainViewModelTests
         public ValueTask DisposeAsync()=>ValueTask.CompletedTask;
     }
 
+    private sealed class ProbeRecordingClient : IModbusRtuClient
+    {
+        public bool IsOpen { get; private set; }
+        public List<ushort> ReadStarts { get; }=[];
+        public ValueTask OpenAsync(SerialConnectionOptions options,CancellationToken cancellationToken=default)
+        {
+            IsOpen=true;
+            return ValueTask.CompletedTask;
+        }
+        public ValueTask CloseAsync(CancellationToken cancellationToken=default)
+        {
+            IsOpen=false;
+            return ValueTask.CompletedTask;
+        }
+        public Task<ushort[]> ReadHoldingRegistersAsync(byte slaveAddress,ushort startAddress,ushort count,
+            CancellationToken cancellationToken=default)
+        {
+            ReadStarts.Add(startAddress);
+            return Task.FromResult<ushort[]>([1]);
+        }
+        public Task WriteSingleRegisterAsync(byte slaveAddress,ushort address,ushort value,
+            CancellationToken cancellationToken=default)=>Task.CompletedTask;
+        public ValueTask DisposeAsync()=>ValueTask.CompletedTask;
+    }
+
     private sealed class FakeDeviceDataService : IDeviceDataService
     {
-        public Task<bool> TestConnectionAsync(byte slaveAddress,CancellationToken cancellationToken=default)=>
+        public Task<bool> TestConnectionAsync(byte slaveAddress,DeviceType deviceType,
+            CancellationToken cancellationToken=default)=>
             Task.FromResult(false);
 
-        public Task<DataReadResult> ReadAsync(byte slaveAddress,WordOrder wordOrder,
+        public Task<DataReadResult> ReadAsync(byte slaveAddress,DeviceType deviceType,WordOrder wordOrder,
             BreakerSeries controllerSeries,CancellationToken cancellationToken=default)=>
             Task.FromResult(new DataReadResult([],[],DateTimeOffset.Now));
     }
 
     private sealed class ConnectedDeviceDataService(IReadOnlyList<DecodedValue>? values=null) : IDeviceDataService
     {
-        public Task<bool> TestConnectionAsync(byte slaveAddress,CancellationToken cancellationToken=default)=>
+        public Task<bool> TestConnectionAsync(byte slaveAddress,DeviceType deviceType,
+            CancellationToken cancellationToken=default)=>
             Task.FromResult(true);
 
-        public Task<DataReadResult> ReadAsync(byte slaveAddress,WordOrder wordOrder,
+        public Task<DataReadResult> ReadAsync(byte slaveAddress,DeviceType deviceType,WordOrder wordOrder,
             BreakerSeries controllerSeries,CancellationToken cancellationToken=default)=>
             Task.FromResult(new DataReadResult(values ?? [],[],DateTimeOffset.Now));
+    }
+
+    private sealed class RecordingDeviceDataService : IDeviceDataService
+    {
+        public List<DeviceType> TestedTypes { get; }=[];
+
+        public Task<bool> TestConnectionAsync(byte slaveAddress,DeviceType deviceType,
+            CancellationToken cancellationToken=default)
+        {
+            TestedTypes.Add(deviceType);
+            return Task.FromResult(true);
+        }
+
+        public Task<DataReadResult> ReadAsync(byte slaveAddress,DeviceType deviceType,WordOrder wordOrder,
+            BreakerSeries controllerSeries,CancellationToken cancellationToken=default)=>
+            Task.FromResult(new DataReadResult([],[],DateTimeOffset.Now));
+    }
+
+    private sealed class FakeProtectionDataService : IProtectionDataService
+    {
+        public Task<DataReadResult> ReadAsync(byte slaveAddress,CancellationToken cancellationToken=default)=>
+            Task.FromResult(new DataReadResult([],[],DateTimeOffset.Now));
+    }
+
+    private sealed class RecordingProtectionDataService : IProtectionDataService
+    {
+        public int Calls { get; private set; }
+
+        public Task<DataReadResult> ReadAsync(byte slaveAddress,CancellationToken cancellationToken=default)
+        {
+            Calls++;
+            var value=new DecodedValue(
+                "长延时电流设定值 Ir1",[0x0016],"100","A","×1",[],ParseStatus.Success,null,
+                DateTimeOffset.Now);
+            return Task.FromResult(new DataReadResult([value],[],DateTimeOffset.Now));
+        }
     }
 
     private sealed class FakeFaultRecordService(Action? timestampRead=null) : IFaultRecordService
@@ -501,5 +654,19 @@ public sealed class MainViewModelTests
 
         public Task SaveAsync(AppSettings settings,CancellationToken cancellationToken=default)=>
             Task.CompletedTask;
+    }
+
+    private sealed class RecordingSettingsService : ISettingsService
+    {
+        public AppSettings? LastSaved { get; private set; }
+
+        public Task<AppSettings> LoadAsync(CancellationToken cancellationToken=default)=>
+            Task.FromResult(new AppSettings());
+
+        public Task SaveAsync(AppSettings settings,CancellationToken cancellationToken=default)
+        {
+            LastSaved=settings;
+            return Task.CompletedTask;
+        }
     }
 }

@@ -6,6 +6,12 @@ public enum WordOrder
     LowWordFirst,
 }
 
+public enum DeviceType
+{
+    FrameController,
+    MoldedCaseCircuitBreaker,
+}
+
 public enum ParseStatus
 {
     Success,
@@ -40,6 +46,12 @@ public enum ValueTransform
     BcdMinuteSecond,
     FaultRecordStatus,
     RecordSelector,
+    MoldedCasePhase,
+    MoldedCaseFaultType,
+    MoldedCaseLongDelayTime,
+    MoldedCaseShortDelayTime,
+    MoldedCaseGroundTime,
+    MoldedCasePreAlarmTime,
 }
 
 public enum FaultRecordType : byte
@@ -60,7 +72,9 @@ public sealed record RegisterDefinition(
     decimal Multiplier = 1m,
     string FormatDescription = "×1",
     bool ProtocolConfirmed = true,
-    bool ShowInTable = true);
+    bool ShowInTable = true,
+    bool IsReadable = true,
+    string? FixedValue = null);
 
 /// <summary>单个 16 位寄存器的原始采样。</summary>
 public sealed record RawRegisterSample(ushort Address, ushort Value, DateTimeOffset ReadAt)

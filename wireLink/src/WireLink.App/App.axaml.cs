@@ -33,7 +33,8 @@ public partial class App : Application
             var parser = new RegisterParser(trace);
             var waveformTimeOffsetStore = new JsonWaveformTimeOffsetStore(trace: trace);
             var viewModel = new MainViewModel(client, new SerialPortCatalog(),
-                new DeviceDataService(client, parser, trace), new FaultRecordService(client, parser),
+                new DeviceDataService(client, parser, trace), new ProtectionDataService(client, parser, trace),
+                new FaultRecordService(client, parser),
                 new WaveformDataService(client, trace), waveformTimeOffsetStore, settingsService, trace, settings);
             ApplyTheme(settings.Theme);
             var mainWindow = new MainWindow(viewModel, client, new ClosedXmlExportService(), logStore);

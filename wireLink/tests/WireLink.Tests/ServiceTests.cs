@@ -3,11 +3,37 @@ using WireLink.Core.Models;
 using WireLink.Core.Protocol;
 using WireLink.Core.Registers;
 using WireLink.Core.Services;
+using WireLink.Infrastructure.Settings;
 
 namespace WireLink.Tests;
 
 public sealed class ServiceTests
 {
+    [Fact]
+    public async Task Settings_without_device_type_default_to_frame_controller()
+    {
+        var path=Path.Combine(Path.GetTempPath(), $"wirelink-settings-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(path,"""
+                {
+                  "PortName": "COM8",
+                  "BaudRate": 9600,
+                  "DeviceAddress": 1
+                }
+                """);
+
+            var settings=await new JsonSettingsService(path).LoadAsync();
+
+            Assert.Equal(DeviceType.FrameController,settings.DeviceType);
+            Assert.Equal("COM8",settings.PortName);
+        }
+        finally
+        {
+            if(File.Exists(path)) File.Delete(path);
+        }
+    }
+
     [Fact]
     public async Task Device_read_keeps_successful_blocks_when_one_block_fails()
     {
@@ -17,7 +43,7 @@ public sealed class ServiceTests
             return Enumerable.Range(start,count).Select(x=>(ushort)(x==1552?0x030B:x)).ToArray();
         });
         var service=new DeviceDataService(client,new RegisterParser());
-        var result=await service.ReadAsync(1,WordOrder.HighWordFirst,BreakerSeries.BW1);
+        var result=await service.ReadAsync(1,DeviceType.FrameController,WordOrder.HighWordFirst,BreakerSeries.BW1);
         Assert.Single(result.Errors);
         Assert.Contains(result.Values,x=>x.Name=="A 相电压");
         Assert.DoesNotContain(result.Values,x=>x.Name=="高精度电流测量 Ia");
@@ -162,7 +188,89 @@ public sealed class ServiceTests
     public async Task Connection_test_reads_exactly_register_256()
     {
         await using var client=new FakeClient((start,count)=> { Assert.Equal((ushort)256,start); Assert.Equal((ushort)1,count); return [230]; });
-        Assert.True(await new DeviceDataService(client,new RegisterParser()).TestConnectionAsync(1));
+        Assert.True(await new DeviceDataService(client,new RegisterParser()).TestConnectionAsync(
+            1,DeviceType.FrameController));
+    }
+
+    [Fact]
+    public async Task Molded_case_connection_test_reads_register_0001()
+    {
+        await using var client=new FakeClient((start,count)=>
+        {
+            Assert.Equal((ushort)0x0001,start);
+            Assert.Equal((ushort)1,count);
+            return [120];
+        });
+
+        Assert.True(await new DeviceDataService(client,new RegisterParser()).TestConnectionAsync(
+            1,DeviceType.MoldedCaseCircuitBreaker));
+    }
+
+    [Fact]
+    public async Task Molded_case_device_read_uses_two_protocol_blocks()
+    {
+        await using var client=new FakeClient((start,count)=>start switch
+        {
+            0x0001 => [120,118,121,0,5,121,2],
+            0x0032 => [8,560,1,125],
+            _ => throw new InvalidOperationException($"非预期读取 {start:X4}H/{count}"),
+        });
+
+        var result=await new DeviceDataService(client,new RegisterParser()).ReadAsync(
+            1,DeviceType.MoldedCaseCircuitBreaker,WordOrder.HighWordFirst,BreakerSeries.BW1);
+
+        Assert.Empty(result.Errors);
+        Assert.Equal([((ushort)0x0001,(ushort)7),((ushort)0x0032,(ushort)4)],
+            client.ReadRequests.Select(request=>(request.Start,request.Count)));
+        Assert.Equal("C相",result.Values.Single(value=>value.Name=="最大电流所在相").Value);
+        Assert.Equal("短延时故障",result.Values.Single(value=>value.Name=="故障类型记录").Value);
+        Assert.Equal("560",result.Values.Single(value=>value.Name=="故障最大相电流记录").DisplayValue);
+        Assert.Equal("2.50 s",result.Values.Single(value=>value.Name=="故障时间记录").DisplayValue);
+    }
+
+    [Fact]
+    public async Task Molded_case_device_read_keeps_fault_block_when_measurement_block_fails()
+    {
+        await using var client=new FakeClient((start,_)=>(start switch
+        {
+            0x0001 => throw new TimeoutException("测量区超时"),
+            0x0032 => [8,560,1,125],
+            _ => throw new InvalidOperationException(),
+        }));
+
+        var result=await new DeviceDataService(client,new RegisterParser()).ReadAsync(
+            1,DeviceType.MoldedCaseCircuitBreaker,WordOrder.HighWordFirst,BreakerSeries.BW1);
+
+        Assert.Single(result.Errors);
+        Assert.DoesNotContain(result.Values,value=>value.Name=="A 相电流");
+        Assert.Contains(result.Values,value=>value.Name=="故障类型记录");
+    }
+
+    [Fact]
+    public async Task Protection_read_skips_reserved_001d_and_returns_fixed_zero()
+    {
+        await using var client=new FakeClient((start,count)=>start switch
+        {
+            0x0016 => [100,30,500,10,800,50,4],
+            0x001E => [5,80],
+            _ => throw new InvalidOperationException($"非预期读取 {start:X4}H/{count}"),
+        });
+
+        var result=await new ProtectionDataService(client,new RegisterParser()).ReadAsync(1);
+
+        Assert.Empty(result.Errors);
+        Assert.Equal([((ushort)0x0016,(ushort)7),((ushort)0x001E,(ushort)2)],
+            client.ReadRequests.Select(request=>(request.Start,request.Count)));
+        Assert.DoesNotContain(client.ReadRequests,request=>
+            request.Start<=0x001D && request.Start+request.Count-1>=0x001D);
+        var reserved=result.Values.Single(value=>value.Name=="漏电电流（未用）");
+        Assert.Equal("0",reserved.DisplayValue);
+        Assert.Empty(reserved.RawSamples);
+        Assert.Equal(ParseStatus.Success,reserved.Status);
+        Assert.Equal("30 s",result.Values.Single(value=>value.Name=="长延时时间设定值 T1").DisplayValue);
+        Assert.Equal("0.2 s",result.Values.Single(value=>value.Name=="短延时时间设定值 T2").DisplayValue);
+        Assert.Equal("0.5 s",result.Values.Single(value=>value.Name=="接地时间设定值 Tg").DisplayValue);
+        Assert.Equal("0.6 s",result.Values.Single(value=>value.Name=="预报警时间设定值 Tp").DisplayValue);
     }
 
     [Fact]

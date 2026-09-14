@@ -408,6 +408,74 @@ public sealed class ParserTests
         Assert.Null(value.Warning);
     }
 
+    [Theory]
+    [InlineData(ValueTransform.MoldedCasePhase,0,"A相")]
+    [InlineData(ValueTransform.MoldedCasePhase,3,"N相")]
+    [InlineData(ValueTransform.MoldedCaseFaultType,0,"无故障")]
+    [InlineData(ValueTransform.MoldedCaseFaultType,1,"瞬时故障")]
+    [InlineData(ValueTransform.MoldedCaseFaultType,2,"漏电故障")]
+    [InlineData(ValueTransform.MoldedCaseFaultType,4,"接地故障")]
+    [InlineData(ValueTransform.MoldedCaseFaultType,8,"短延时故障")]
+    [InlineData(ValueTransform.MoldedCaseFaultType,16,"长延时故障")]
+    [InlineData(ValueTransform.MoldedCaseFaultType,48,"故障未读取")]
+    [InlineData(ValueTransform.MoldedCaseLongDelayTime,0,"OFF")]
+    [InlineData(ValueTransform.MoldedCaseLongDelayTime,150,"150 s")]
+    [InlineData(ValueTransform.MoldedCaseShortDelayTime,0,"OFF")]
+    [InlineData(ValueTransform.MoldedCaseShortDelayTime,3,"0.06 s")]
+    [InlineData(ValueTransform.MoldedCaseShortDelayTime,15,"0.3 s")]
+    [InlineData(ValueTransform.MoldedCaseGroundTime,0,"0.1 s")]
+    [InlineData(ValueTransform.MoldedCaseGroundTime,7,"0.8 s")]
+    [InlineData(ValueTransform.MoldedCaseGroundTime,8,"报警")]
+    [InlineData(ValueTransform.MoldedCasePreAlarmTime,0,"0.1 s")]
+    [InlineData(ValueTransform.MoldedCasePreAlarmTime,9,"1.0 s")]
+    public void Molded_case_parser_maps_confirmed_values(
+        ValueTransform transform,int raw,string expected)
+    {
+        var definition=new RegisterDefinition("测试",[1],RegisterDataType.UInt16,string.Empty,transform);
+        var value=new RegisterParser().Parse(
+            [definition],new Dictionary<ushort,RawRegisterSample>{{1,Sample(1,(ushort)raw)}},
+            WordOrder.HighWordFirst).Single();
+
+        Assert.Equal(expected,value.DisplayValue);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.Null(value.Warning);
+    }
+
+    [Theory]
+    [InlineData(ValueTransform.MoldedCasePhase,4)]
+    [InlineData(ValueTransform.MoldedCaseFaultType,3)]
+    [InlineData(ValueTransform.MoldedCaseLongDelayTime,151)]
+    [InlineData(ValueTransform.MoldedCaseShortDelayTime,4)]
+    [InlineData(ValueTransform.MoldedCaseGroundTime,9)]
+    [InlineData(ValueTransform.MoldedCasePreAlarmTime,10)]
+    public void Molded_case_parser_keeps_unknown_raw_value_with_warning(
+        ValueTransform transform,int raw)
+    {
+        var definition=new RegisterDefinition("测试",[1],RegisterDataType.UInt16,string.Empty,transform);
+        var value=new RegisterParser().Parse(
+            [definition],new Dictionary<ushort,RawRegisterSample>{{1,Sample(1,(ushort)raw)}},
+            WordOrder.HighWordFirst).Single();
+
+        Assert.Equal(raw.ToString(),value.Value);
+        Assert.Equal(ParseStatus.ProtocolUnconfirmed,value.Status);
+        Assert.Contains("协议未定义",value.Warning);
+    }
+
+    [Fact]
+    public void Non_readable_reserved_definition_returns_fixed_value_without_sample()
+    {
+        var definition=DeviceProfileCatalog.MoldedCaseCircuitBreaker.ProtectionData!.Definitions
+            .Single(value=>value.Addresses.Contains((ushort)0x001D));
+
+        var value=new RegisterParser().Parse(
+            [definition],new Dictionary<ushort,RawRegisterSample>(),WordOrder.HighWordFirst).Single();
+
+        Assert.Equal("0",value.DisplayValue);
+        Assert.Empty(value.RawSamples);
+        Assert.Equal(ParseStatus.Success,value.Status);
+        Assert.False(definition.IsReadable);
+    }
+
     [Fact]
     public void Continuation_registers_do_not_create_duplicate_items()
     {
