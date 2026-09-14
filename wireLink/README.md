@@ -13,6 +13,18 @@ dotnet test tests/WireLink.Tests/WireLink.Tests.csproj
 dotnet run --project src/WireLink.App/WireLink.App.csproj
 ```
 
+```
+dotnet build .\src\WireLink.App -t:Rebuild
+dotnet build .\src\WireLink.App\WireLink.App.csproj --target Rebuild
+
+```
+
+实际上，如果你的目的只是干净地重新编译整个项目，我更建议：
+```
+dotnet clean .\src\WireLink.App\WireLink.App.csproj
+dotnet build .\src\WireLink.App\WireLink.App.csproj
+```
+
 操作顺序：选择设备类型、串口和波特率 → 打开串口 → 输入设备地址 → 连接测试 → 读取该设备支持的数据。切换设备类型会保留已打开的串口，但会停止刷新、清空旧数据并要求重新连接测试。程序恢复上次设置，但不会自动打开串口。
 
 macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed by system policy`，请按 [发布与签名](docs/release.md) 的调试签名段处理。
