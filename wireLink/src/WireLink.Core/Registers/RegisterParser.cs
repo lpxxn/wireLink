@@ -616,6 +616,24 @@ public sealed class RegisterParser
         return $"{typeName} / 第 {index} 条记录";
     }
 
+    /// <summary>
+    /// 取出 <paramref name="multiplier"/> 内部记录的小数位数（decimal scale）。
+    /// </summary>
+    /// <remarks>
+    /// CLR 的 <see cref="decimal"/> 把数值存成 96 位整数再乘以 10<sup>-scale</sup>。
+    /// <see cref="decimal.GetBits"/> 返回 4 个 int：
+    /// <list type="bullet">
+    /// <item><description>bits[0..2]：96 位整数部分（低/中/高 32 位）</description></item>
+    /// <item><description>bits[3] 的 bit16–23：scale，即小数点后的位数，范围 0–28</description></item>
+    /// <item><description>bits[3] 的 bit31：符号位</description></item>
+    /// </list>
+    /// 因此 <c>(bits[3] >> 16) &amp; 0x7F</c> 就是 scale。
+    /// 例如 0.1 的 scale 为 1，0.01 为 2，10 为 0。
+    /// <para>
+    /// 调用方 <c>Scale</c> 用这个位数生成 <c>F{n}</c> 格式，让显示精度与协议倍率一致，
+    /// 而不是依赖 <see cref="decimal.ToString()"/> 的默认舍入或尾随零规则。
+    /// </para>
+    /// </remarks>
     private static int DecimalDigits(decimal multiplier)
     {
         var bits = decimal.GetBits(multiplier);

@@ -44,6 +44,7 @@ macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed b
 - [开发计划](docs/development-plan.md)
 - [架构与维护](docs/architecture.md)
 - [协议解析与未确认规则](docs/protocol.md)
+- [decimal scale：如何取出倍率的小数位数](docs/decimal-scale-explained.md)
 - [塑壳断路器协议实现](docs/molded-case-circuit-breaker.md)
 - [故障录波协议解析](docs/waveform-protocol.md)
 - [录波 RMS 公式与解析代码说明](docs/waveform-rms-explained.md)
