@@ -29,7 +29,8 @@ public sealed class WaveformPointDetailsViewModelTests
             points,
             1,
             2,
-            3);
+            3,
+            WaveformCalibration.FromRegisterValue(0x0204));
 
         var viewModel = new WaveformPointDetailsViewModel(data);
 

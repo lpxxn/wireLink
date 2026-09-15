@@ -14,7 +14,7 @@ socat -d -d pty,raw,echo=0,link=/tmp/wirelink-app pty,raw,echo=0,link=/tmp/wirel
 另开终端启动模拟器：
 
 ```bash
-dotnet run --project src/WireLink.Simulator -- --port /tmp/wirelink-device --baud 9600 --address 1
+dotnet run --project src/WireLink.Simulator -- --port /tmp/wirelink-device --baud 9600 --address 1 --protection-mode 3
 ```
 
 主程序端口手动输入 `/tmp/wirelink-app`。
@@ -50,7 +50,7 @@ quit
 也可以在 com0com 安装目录中直接执行非交互式命令，例如 `setupc.exe list`。端口对准备好后，启动模拟器：
 
 ```powershell
-dotnet run --project src/WireLink.Simulator -- --port COM11 --baud 9600 --address 1
+dotnet run --project src/WireLink.Simulator -- --port COM11 --baud 9600 --address 1 --protection-mode 3
 ```
 
 主程序选择 COM10。正式部署应使用经过组织安全审查且与 Windows 版本兼容的虚拟 COM 驱动。
@@ -65,7 +65,13 @@ dotnet run --project src/WireLink.Simulator -- --port COM11 --baud 9600 --addres
 - `current normal`：清除当前故障/报警，512 显示普通合闸状态。
 - `current fault` 或 `fault`：设置当前过载故障样例，512 置故障标志，515/516～523 返回当前故障数据。
 - `current alarm` 或 `alarm`：设置当前过载预报警样例，512 置报警标志，513～514/515/516 返回当前报警数据。
-- `status`：显示模式、地址和寄存器数。
+- `protection 0`：把 `1793.bit12～bit10` 改为 0“关闭”，模式相关字段保留原值。
+- `protection 1`：改为 1“漏电型”，主程序按漏电规则解析。
+- `protection 2`：改为 2“差值型”，主程序保留原值并显示未确认提示。
+- `protection 3`：改为 3“地电流型”，主程序按接地规则解析。`ground 0|1|2|3` 是同一命令的别名。
+- `status`：显示故障注入模式、当前事件、1793 保护模式、地址和寄存器数。
 - `quit`：退出。
 
-模拟 uint32 始终按高字优先编码。电压和电流会缓慢变化；当前热容 279 的样例值为 `68%`，总操作次数 1031 的样例值为 `128`。寄存器 1552 返回 `0x0304`：bit0～bit7 的序值是 4，BW1/BW3 均映射为 630A、变比 1；bit8～bit11 的框架等级样例是 3，用于验证解析器不会把高位混入额定电流序值。主程序不读取寄存器 788。
+启动参数 `--protection-mode` 同样只接受 0～3，省略时默认为 3“地电流型”。运行期间执行 `protection` 命令只改写 1793 的 bit12～bit10，寄存器其他位保持不变；主程序重新点击保护页“立即读取”后即可看到新模式的解析结果。
+
+模拟 uint32 始终按高字优先编码。电压和电流会缓慢变化；当前热容 279 的样例值为 `68%`，总操作次数 1031 的样例值为 `128`。寄存器 1552 返回 `0x0204`：bit0～bit7 的序值是 4，BW1/BW3 均映射为 630A、变比 1；bit8～bit11 的框架等级是 2，录波换算使用 `Rate=2`；bit12～bit15 为 0。主程序不读取寄存器 788。
