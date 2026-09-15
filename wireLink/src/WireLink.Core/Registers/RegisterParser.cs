@@ -781,6 +781,23 @@ public sealed class RegisterParser
         return (bits[3] >> 16) & 0x7F;
     }
 
+    /// <summary>
+    /// 若 <paramref name="value"/> 的第 <paramref name="bit"/> 位为 1，则把对应含义加入结果列表。
+    /// </summary>
+    /// <remarks>
+    /// 寄存器按位编码状态：每一位独立表示一个开关量（0 = 无 / 1 = 有）。
+    /// 例如运行状态字 bit2 = 有报警，bit3 = 故障跳闸。
+    /// <para>
+    /// <c>1 &lt;&lt; bit</c> 把字面量 1 左移 <paramref name="bit"/> 位，得到只在该位为 1 的掩码：
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>bit = 0 → 0b0000_0001（1）</description></item>
+    /// <item><description>bit = 2 → 0b0000_0100（4）</description></item>
+    /// <item><description>bit = 10 → 0b0000_0100_0000_0000（1024）</description></item>
+    /// </list>
+    /// <c>value &amp; mask</c> 只保留这一位：结果非 0 说明该标志置位。
+    /// 不能写成 <c>value &amp; bit</c>，那是把 bit 当数值去与，而不是检测第 N 位。
+    /// </remarks>
     private static void AddFlag(List<string> target, ushort value, int bit, string text)
     {
         if ((value & (1 << bit)) != 0)
