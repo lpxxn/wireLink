@@ -191,7 +191,7 @@ public sealed class ClosedXmlExportService : IExcelExportService
         sheet.Column(3).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
         sheet.Cell(3, 2).Style.NumberFormat.Format = null;
         sheet.Cell(4, 2).Style.NumberFormat.Format = null;
-        sheet.Columns(4, 6).Style.NumberFormat.Format = "0.0";
+        sheet.Columns(4, 6).Style.NumberFormat.Format = "0.00";
         sheet.Cell(7, 4).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss";
         sheet.Cell(8, 2).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
         sheet.Cell(8, 4).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";

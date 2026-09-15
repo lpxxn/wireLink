@@ -326,9 +326,9 @@ public sealed class MainViewModelTests
         Assert.False(viewModel.IsFrameController);
         Assert.Empty(viewModel.FaultRows);
         Assert.Contains(viewModel.DeviceRows.SelectMany(RowItems),item=>item.Name=="A 相电流");
-        var reserved=Assert.Single(viewModel.ProtectionRows.SelectMany(RowItems),
-            item=>item.Name=="漏电电流（未用）");
-        Assert.Equal("0",reserved.DisplayValue);
+        var leakageCurrent=Assert.Single(viewModel.ProtectionRows.SelectMany(RowItems),
+            item=>item.Name=="漏电电流");
+        Assert.Equal("—",leakageCurrent.DisplayValue);
         Assert.Contains("请重新进行连接测试",viewModel.Notice);
     }
 

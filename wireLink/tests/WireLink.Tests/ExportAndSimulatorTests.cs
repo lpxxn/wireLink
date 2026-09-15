@@ -76,6 +76,14 @@ public sealed class ExportAndSimulatorTests
     }
 
     [Fact]
+    public void Simulator_exposes_molded_case_001d_raw_value()
+    {
+        var engine=new SimulatorEngine(1);
+
+        Assert.Equal((ushort)35,ReadRegisters(engine,0x001D,1).Single());
+    }
+
+    [Fact]
     public void Simulator_can_inject_bad_crc_once()
     {
         var engine=new SimulatorEngine(1){FaultMode=SimulatorFaultMode.BadCrcOnce};

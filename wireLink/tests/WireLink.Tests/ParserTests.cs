@@ -462,18 +462,22 @@ public sealed class ParserTests
     }
 
     [Fact]
-    public void Non_readable_reserved_definition_returns_fixed_value_without_sample()
+    public void Molded_case_001d_displays_raw_decimal_value()
     {
         var definition=DeviceProfileCatalog.MoldedCaseCircuitBreaker.ProtectionData!.Definitions
             .Single(value=>value.Addresses.Contains((ushort)0x001D));
 
         var value=new RegisterParser().Parse(
-            [definition],new Dictionary<ushort,RawRegisterSample>(),WordOrder.HighWordFirst).Single();
+            [definition],new Dictionary<ushort,RawRegisterSample>
+            {
+                [0x001D]=Sample(0x001D,1234),
+            },WordOrder.HighWordFirst).Single();
 
-        Assert.Equal("0",value.DisplayValue);
-        Assert.Empty(value.RawSamples);
+        Assert.Equal("1234",value.DisplayValue);
+        Assert.Single(value.RawSamples);
         Assert.Equal(ParseStatus.Success,value.Status);
-        Assert.False(definition.IsReadable);
+        Assert.True(definition.IsReadable);
+        Assert.Equal(string.Empty,definition.Unit);
     }
 
     [Fact]

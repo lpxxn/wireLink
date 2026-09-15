@@ -122,15 +122,15 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         var map = new Dictionary<ushort, ushort>();
         foreach (var (start, count) in new[]
                  {
-                     (1, 7), (0x16, 7), (0x1E, 2), (0x32, 4),
+                     (1, 7), (0x16, 8), (0x1E, 2), (0x32, 4),
                      (256, 3), (268, 3), (336, 8), (352, 6), (512, 12), (768, 18),
                  })
             for (var i = 0; i < count; i++) map[(ushort)(start + i)] = 0;
-        // 塑壳断路器示例；001D 为协议保留地址，故意不加入寄存器表。
+        // 塑壳断路器示例。
         map[0x0001]=120; map[0x0002]=118; map[0x0003]=121; map[0x0004]=0;
         map[0x0005]=5; map[0x0006]=121; map[0x0007]=2;
         map[0x0016]=100; map[0x0017]=30; map[0x0018]=500; map[0x0019]=10;
-        map[0x001A]=800; map[0x001B]=50; map[0x001C]=4;
+        map[0x001A]=800; map[0x001B]=50; map[0x001C]=4; map[0x001D]=35;
         map[0x001E]=5; map[0x001F]=80;
         map[0x0032]=8; map[0x0033]=560; map[0x0034]=1; map[0x0035]=125;
         map[256]=230; map[257]=231; map[258]=229; map[268]=21; map[269]=20; map[270]=22;

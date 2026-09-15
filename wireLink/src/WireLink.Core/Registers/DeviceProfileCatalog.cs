@@ -81,7 +81,7 @@ public static class DeviceProfileCatalog
                 Number("故障时间记录", 0x0035, "s", 0.02m),
             ]),
         new RegisterPageProfile(
-            [new(0x0016, 7), new(0x001E, 2)],
+            [new(0x0016, 8), new(0x001E, 2)],
             [
                 Number("长延时电流设定值 Ir1", 0x0016, "A"),
                 new("长延时时间设定值 T1", [0x0017], RegisterDataType.UInt16, string.Empty,
@@ -93,9 +93,7 @@ public static class DeviceProfileCatalog
                 Number("接地电流设定值 Ir4", 0x001B, "A"),
                 new("接地时间设定值 Tg", [0x001C], RegisterDataType.UInt16, string.Empty,
                     ValueTransform.MoldedCaseGroundTime, FormatDescription: "见 6.7"),
-                new("漏电电流", [0x001D], RegisterDataType.UInt16, string.Empty,
-                    ValueTransform.Multiply, FormatDescription: "协议保留地址，不读取",
-                    IsReadable: false, FixedValue: "0"),
+                Number("漏电电流", 0x001D, string.Empty),
                 new("预报警时间设定值 Tp", [0x001E], RegisterDataType.UInt16, string.Empty,
                     ValueTransform.MoldedCasePreAlarmTime, FormatDescription: "见 6.8"),
                 Number("预报警电流设定值 Ip", 0x001F, "A"),

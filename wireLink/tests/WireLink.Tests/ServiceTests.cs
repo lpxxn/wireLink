@@ -247,11 +247,11 @@ public sealed class ServiceTests
     }
 
     [Fact]
-    public async Task Protection_read_skips_reserved_001d_and_returns_fixed_zero()
+    public async Task Protection_read_includes_001d_and_returns_raw_decimal_value()
     {
         await using var client=new FakeClient((start,count)=>start switch
         {
-            0x0016 => [100,30,500,10,800,50,4],
+            0x0016 => [100,30,500,10,800,50,4,35],
             0x001E => [5,80],
             _ => throw new InvalidOperationException($"非预期读取 {start:X4}H/{count}"),
         });
@@ -259,14 +259,15 @@ public sealed class ServiceTests
         var result=await new ProtectionDataService(client,new RegisterParser()).ReadAsync(1);
 
         Assert.Empty(result.Errors);
-        Assert.Equal([((ushort)0x0016,(ushort)7),((ushort)0x001E,(ushort)2)],
+        Assert.Equal([((ushort)0x0016,(ushort)8),((ushort)0x001E,(ushort)2)],
             client.ReadRequests.Select(request=>(request.Start,request.Count)));
-        Assert.DoesNotContain(client.ReadRequests,request=>
+        Assert.Contains(client.ReadRequests,request=>
             request.Start<=0x001D && request.Start+request.Count-1>=0x001D);
-        var reserved=result.Values.Single(value=>value.Name=="漏电电流（未用）");
-        Assert.Equal("0",reserved.DisplayValue);
-        Assert.Empty(reserved.RawSamples);
-        Assert.Equal(ParseStatus.Success,reserved.Status);
+        var leakageCurrent=result.Values.Single(value=>value.Name=="漏电电流");
+        Assert.Equal("35",leakageCurrent.DisplayValue);
+        Assert.Single(leakageCurrent.RawSamples);
+        Assert.Equal((ushort)35,leakageCurrent.RawSamples[0].Value);
+        Assert.Equal(ParseStatus.Success,leakageCurrent.Status);
         Assert.Equal("30 s",result.Values.Single(value=>value.Name=="长延时时间设定值 T1").DisplayValue);
         Assert.Equal("0.2 s",result.Values.Single(value=>value.Name=="短延时时间设定值 T2").DisplayValue);
         Assert.Equal("0.5 s",result.Values.Single(value=>value.Name=="接地时间设定值 Tg").DisplayValue);
