@@ -101,6 +101,41 @@ public sealed class ExportAndSimulatorTests
         Assert.Equal("20%", result.Values.Single(value => value.Name == "I 不平衡返回值").DisplayValue);
     }
 
+    [Theory]
+    [InlineData(0, "关闭", "315", ParseStatus.ProtocolUnconfirmed)]
+    [InlineData(1, "漏电型", "3.15 A", ParseStatus.Success)]
+    [InlineData(2, "差值型", "315", ParseStatus.ProtocolUnconfirmed)]
+    [InlineData(3, "地电流型", "315 A", ParseStatus.Success)]
+    public async Task Simulator_can_change_1793_ground_protection_mode(
+        byte mode, string expectedMode, string expectedActionValue, ParseStatus expectedActionStatus)
+    {
+        var engine = new SimulatorEngine(1);
+        engine.SetGroundProtectionMode(mode);
+        await using var client = new SimulatorClient(engine);
+
+        Assert.Equal(mode, engine.GroundProtectionMode);
+        var register = ReadRegisters(engine, RegisterCatalog.GroundProtectionModeRegisterAddress, 1).Single();
+        Assert.Equal(mode, (byte)((register & RegisterCatalog.GroundProtectionModeMask) >> 10));
+
+        var result = await new ProtectionDataService(client, new RegisterParser()).ReadAsync(
+            1, DeviceType.FrameController, WordOrder.HighWordFirst, BreakerSeries.BW1);
+        var decoded = result.Values.Single(value => value.Name == "接地保护方式");
+        Assert.Equal(expectedMode, decoded.DisplayValue);
+        Assert.Equal(mode == 2 ? ParseStatus.ProtocolUnconfirmed : ParseStatus.Success, decoded.Status);
+        var actionValue = result.Values.Single(value => value.Name == "保护动作值");
+        Assert.Equal(expectedActionValue, actionValue.DisplayValue);
+        Assert.Equal(expectedActionStatus, actionValue.Status);
+    }
+
+    [Fact]
+    public void Simulator_rejects_unsupported_ground_protection_mode()
+    {
+        var engine = new SimulatorEngine(1);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => engine.SetGroundProtectionMode(4));
+        Assert.Equal((byte)3, engine.GroundProtectionMode);
+    }
+
     [Fact]
     public void Simulator_can_inject_bad_crc_once()
     {

@@ -19,6 +19,15 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
     public byte SlaveAddress { get; } = slaveAddress;
     public SimulatorFaultMode FaultMode { get; set; }
     public SimulatorCurrentEventMode CurrentEventMode { get; private set; } = SimulatorCurrentEventMode.Normal;
+    public byte GroundProtectionMode
+    {
+        get
+        {
+            lock (_sync)
+                return (byte)((_registers[RegisterCatalog.GroundProtectionModeRegisterAddress]
+                    & RegisterCatalog.GroundProtectionModeMask) >> 10);
+        }
+    }
     public byte ExceptionCode { get; set; } = 0x02;
     public IReadOnlyDictionary<ushort, ushort> Registers => _registers;
     public int RegisterCount { get { lock (_sync) return _registers.Count; } }
@@ -29,6 +38,23 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         {
             CurrentEventMode = mode;
             LoadCurrentEvent();
+        }
+    }
+
+    /// <summary>
+    /// 修改 1793.bit12～bit10：0=关闭，1=漏电型，2=差值型，3=地电流型。
+    /// 1793 的其他位保持不变。
+    /// </summary>
+    public void SetGroundProtectionMode(byte mode)
+    {
+        if (mode > 3)
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "接地保护方式只允许 0～3。");
+
+        lock (_sync)
+        {
+            var address = RegisterCatalog.GroundProtectionModeRegisterAddress;
+            var original = _registers[address];
+            _registers[address] = (ushort)((original & ~RegisterCatalog.GroundProtectionModeMask) | (mode << 10));
         }
     }
 

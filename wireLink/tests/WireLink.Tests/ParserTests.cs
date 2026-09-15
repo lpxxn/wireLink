@@ -509,7 +509,7 @@ public sealed class ParserTests
         int mode, int raw, string expected)
     {
         var definition = DeviceProfileCatalog.FrameController.ProtectionData!.Definitions
-            .Single(value => value.Name == "接地/漏电保护动作时间");
+            .Single(value => value.Name == "保护动作时间");
         var samples = new Dictionary<ushort, RawRegisterSample>
         {
             [1288] = Sample(1288, (ushort)raw),
@@ -526,7 +526,7 @@ public sealed class ParserTests
     public void Frame_protection_mode_two_keeps_mode_dependent_value_unscaled()
     {
         var definition = DeviceProfileCatalog.FrameController.ProtectionData!.Definitions
-            .Single(value => value.Name == "接地/漏电保护动作值");
+            .Single(value => value.Name == "保护动作值");
         var samples = new Dictionary<ushort, RawRegisterSample>
         {
             [1287] = Sample(1287, 315),
