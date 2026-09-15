@@ -524,7 +524,7 @@
             </Grid>
           </TabItem>
 
-          <TabItem Header="保护数据" IsVisible="{Binding IsMoldedCaseCircuitBreaker}">
+          <TabItem Header="保护数据" IsVisible="{Binding HasProtectionData}">
             <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20">
               <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
                 <Button Grid.Column="1"

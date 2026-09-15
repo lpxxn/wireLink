@@ -52,6 +52,12 @@ public enum ValueTransform
     MoldedCaseShortDelayTime,
     MoldedCaseGroundTime,
     MoldedCasePreAlarmTime,
+    FrameGroundProtectionMode,
+    FrameNPhaseProtection,
+    FrameGroundOrLeakageCurrent,
+    FrameGroundOrLeakageActionTime,
+    LowByte,
+    HighByte,
 }
 
 public enum FaultRecordType : byte

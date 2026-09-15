@@ -17,7 +17,9 @@ public interface IDeviceDataService
 
 public interface IProtectionDataService
 {
-    Task<DataReadResult> ReadAsync(byte slaveAddress, CancellationToken cancellationToken = default);
+    Task<DataReadResult> ReadAsync(byte slaveAddress, DeviceType deviceType,
+        WordOrder wordOrder, BreakerSeries controllerSeries,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>历史故障记录读取服务。</summary>
@@ -133,13 +135,16 @@ public sealed class ProtectionDataService(IModbusRtuClient client, RegisterParse
 {
     private readonly IProtocolTrace _trace = trace ?? NullProtocolTrace.Instance;
 
-    public Task<DataReadResult> ReadAsync(byte slaveAddress, CancellationToken cancellationToken = default)
+    public Task<DataReadResult> ReadAsync(byte slaveAddress, DeviceType deviceType,
+        WordOrder wordOrder, BreakerSeries controllerSeries,
+        CancellationToken cancellationToken = default)
     {
-        var page = DeviceProfileCatalog.MoldedCaseCircuitBreaker.ProtectionData
-            ?? throw new InvalidOperationException("塑壳断路器保护数据目录未配置。");
+        var profile = DeviceProfileCatalog.Get(deviceType);
+        var page = profile.ProtectionData
+            ?? throw new InvalidOperationException($"{profile.DisplayName}保护数据目录未配置。");
         return RegisterPageReader.ReadAsync(
-            client, parser, _trace, slaveAddress, page, WordOrder.HighWordFirst,
-            BreakerSeries.BW1, cancellationToken);
+            client, parser, _trace, slaveAddress, page, wordOrder,
+            controllerSeries, cancellationToken);
     }
 }
 

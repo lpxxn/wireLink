@@ -125,6 +125,16 @@ public sealed class RegisterParser
                 ValueTransform.MoldedCaseShortDelayTime => DecodeMoldedCaseShortDelayTime(numeric),
                 ValueTransform.MoldedCaseGroundTime => DecodeMoldedCaseGroundTime(numeric),
                 ValueTransform.MoldedCasePreAlarmTime => DecodeMoldedCasePreAlarmTime(numeric),
+                ValueTransform.FrameGroundProtectionMode => DecodeFrameGroundProtectionMode(numeric),
+                ValueTransform.FrameNPhaseProtection => DecodeFrameNPhaseProtection(numeric),
+                ValueTransform.FrameGroundOrLeakageCurrent =>
+                    DecodeFrameGroundOrLeakageCurrent(numeric, allSamples, controllerSeries),
+                ValueTransform.FrameGroundOrLeakageActionTime =>
+                    DecodeFrameGroundOrLeakageActionTime(numeric, allSamples),
+                ValueTransform.LowByte => DecodeByte(
+                    numeric, highByte: false, definition.Multiplier, definition.ProtocolConfirmed),
+                ValueTransform.HighByte => DecodeByte(
+                    numeric, highByte: true, definition.Multiplier, definition.ProtocolConfirmed),
                 _ => throw new ArgumentOutOfRangeException(),
             };
 
@@ -340,6 +350,137 @@ public sealed class RegisterParser
     private static (string, string, ParseStatus, string?) UnknownMoldedCaseValue(uint raw, string field) =>
         (raw.ToString(CultureInfo.InvariantCulture), "协议未定义，保留十进制原始值",
             ParseStatus.ProtocolUnconfirmed, $"协议未定义{field}原值 {raw}");
+
+    private static (string, string, ParseStatus, string?) DecodeFrameGroundProtectionMode(uint raw)
+    {
+        var mode = (raw & RegisterCatalog.GroundProtectionModeMask) >> 10;
+        return mode switch
+        {
+            0 => ("关闭", $"1793=0x{raw:X4}；bit12～bit10=0", ParseStatus.Success, null),
+            1 => ("漏电型", $"1793=0x{raw:X4}；bit12～bit10=1", ParseStatus.Success, null),
+            2 => ("差值型", $"1793=0x{raw:X4}；bit12～bit10=2", ParseStatus.ProtocolUnconfirmed,
+                "差值型保护参数换算尚未实现"),
+            3 => ("地电流型", $"1793=0x{raw:X4}；bit12～bit10=3", ParseStatus.Success, null),
+            _ => ($"保留值 {mode}", $"1793=0x{raw:X4}；bit12～bit10={mode}",
+                ParseStatus.ProtocolUnconfirmed, "协议未定义该接地保护方式"),
+        };
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeFrameNPhaseProtection(uint raw)
+    {
+        var value = raw switch
+        {
+            0 => "50%",
+            1 => "100%",
+            2 => "160%",
+            3 => "200%",
+            4 => "关闭",
+            _ => null,
+        };
+        return value is not null
+            ? (value, $"1286={raw}；按 5.14 枚举", ParseStatus.Success, null)
+            : (raw.ToString(CultureInfo.InvariantCulture), $"1286={raw}；未定义枚举",
+                ParseStatus.ProtocolUnconfirmed, $"协议未定义 N 相保护设置值 {raw}");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeFrameGroundOrLeakageCurrent(
+        uint raw,
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        BreakerSeries controllerSeries)
+    {
+        if (!TryGetGroundProtectionMode(samples, out var mode, out var modeRaw))
+            return MissingGroundProtectionMode(raw);
+
+        if (mode == 1)
+        {
+            var value = raw * 0.01m;
+            return ($"{value.ToString("0.00", CultureInfo.InvariantCulture)} A",
+                $"1793=0x{modeRaw:X4}；bit12～bit10=1（漏电型）；{raw} × 0.01A",
+                ParseStatus.Success, null);
+        }
+
+        if (mode == 3)
+        {
+            var result = ScaleByCurrentRatio(raw, samples, controllerSeries);
+            return result.Item3 == ParseStatus.Success
+                ? ($"{result.Item1} A",
+                    $"1793=0x{modeRaw:X4}；bit12～bit10=3（地电流型）；{result.Item2}",
+                    result.Item3, result.Item4)
+                : result;
+        }
+
+        return UnsupportedGroundProtectionMode(raw, mode, modeRaw);
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeFrameGroundOrLeakageActionTime(
+        uint raw,
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples)
+    {
+        if (!TryGetGroundProtectionMode(samples, out var mode, out var modeRaw))
+            return MissingGroundProtectionMode(raw);
+
+        if (mode == 3)
+            return ($"{(raw * 0.01m).ToString("0.00", CultureInfo.InvariantCulture)} s",
+                $"1793=0x{modeRaw:X4}；bit12～bit10=3（地电流型）；{raw} × 0.01s",
+                ParseStatus.Success, null);
+
+        if (mode == 1)
+        {
+            string[] values = ["瞬时", "0.06 s", "0.08 s", "0.17 s", "0.25 s", "0.33 s",
+                "0.42 s", "0.50 s", "0.58 s", "0.67 s", "0.75 s", "0.83 s"];
+            return raw < (uint)values.Length
+                ? (values[(int)raw], $"1793=0x{modeRaw:X4}；bit12～bit10=1（漏电型）；按 5.15 枚举 {raw}",
+                    ParseStatus.Success, null)
+                : (raw.ToString(CultureInfo.InvariantCulture),
+                    $"1793=0x{modeRaw:X4}；bit12～bit10=1（漏电型）；5.15 未定义枚举 {raw}",
+                    ParseStatus.ProtocolUnconfirmed, $"协议未定义漏电保护动作时间值 {raw}");
+        }
+
+        return UnsupportedGroundProtectionMode(raw, mode, modeRaw);
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeByte(
+        uint raw,
+        bool highByte,
+        decimal multiplier,
+        bool confirmed)
+    {
+        var value = highByte ? (raw >> 8) & 0xFF : raw & 0xFF;
+        var part = highByte ? "高 8 位" : "低 8 位";
+        var scaled = Scale(value, multiplier, confirmed);
+        return (scaled.Item1,
+            $"0x{raw:X4} 的{part}={value}；{scaled.Item2}", scaled.Item3, scaled.Item4);
+    }
+
+    private static bool TryGetGroundProtectionMode(
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        out uint mode,
+        out ushort raw)
+    {
+        if (!samples.TryGetValue(RegisterCatalog.GroundProtectionModeRegisterAddress, out var sample))
+        {
+            mode = 0;
+            raw = 0;
+            return false;
+        }
+
+        raw = sample.Value;
+        mode = (uint)((raw & RegisterCatalog.GroundProtectionModeMask) >> 10);
+        return true;
+    }
+
+    private static (string, string, ParseStatus, string?) MissingGroundProtectionMode(uint raw) =>
+        (raw.ToString(CultureInfo.InvariantCulture), "未换算；缺少寄存器 1793",
+            ParseStatus.InvalidData, "未读取到 1793，无法判断按漏电还是接地解释");
+
+    private static (string, string, ParseStatus, string?) UnsupportedGroundProtectionMode(
+        uint raw, uint mode, ushort modeRaw) =>
+        (raw.ToString(CultureInfo.InvariantCulture),
+            $"1793=0x{modeRaw:X4}；bit12～bit10={mode}；原始值 {raw} 未换算",
+            ParseStatus.ProtocolUnconfirmed,
+            mode == 0 ? "接地保护方式为关闭，保留原始值"
+                : mode == 2 ? "差值型参数换算尚未实现，保留原始值"
+                : $"接地保护方式 {mode} 为协议保留值，保留原始值");
 
     /// <summary>
     /// 报警事件按已确认的 5.5.2 规则只有数据 0 有效：

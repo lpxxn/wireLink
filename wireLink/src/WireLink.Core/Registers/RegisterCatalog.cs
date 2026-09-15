@@ -14,6 +14,12 @@ public static class RegisterCatalog
     /// <summary>1552 中额定电流序值所占的低 8 位。</summary>
     public const ushort RatedCurrentOrdinalMask = 0x00FF;
 
+    /// <summary>框架控制器参数寄存器；bit12～bit10 表示接地保护方式。</summary>
+    public const ushort GroundProtectionModeRegisterAddress = 1793;
+
+    /// <summary>1793 中接地保护方式所占的 bit12～bit10。</summary>
+    public const ushort GroundProtectionModeMask = 0x1C00;
+
     public static IReadOnlyList<RegisterBlock> DeviceBlocks { get; } =
     [
         // 每个无业务依赖的字段独立读取，避免一个地址失败连带清空其他字段。

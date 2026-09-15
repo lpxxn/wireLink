@@ -252,6 +252,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public DeviceType SelectedDeviceType => SelectedDevice.Value;
     public bool IsFrameController => SelectedDeviceType == DeviceType.FrameController;
     public bool IsMoldedCaseCircuitBreaker => SelectedDeviceType == DeviceType.MoldedCaseCircuitBreaker;
+    public bool HasProtectionData => DeviceProfileCatalog.Get(SelectedDeviceType).ProtectionData is not null;
     public bool CanSelectDeviceType => !IsBusy;
     public int SelectedDataTabIndex
     {
@@ -286,11 +287,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanTest => IsSerialOpen && !IsBusy && DeviceAddress is not null;
     public bool CanRead => IsDeviceConnected && !IsBusy && DeviceAddress is not null;
     public bool CanAutoRefresh => CanRead && RefreshSeconds is not null;
-    public bool CanReadProtection => CanRead && IsMoldedCaseCircuitBreaker;
+    public bool CanReadProtection => CanRead && HasProtectionData;
     public bool CanReadFault => CanRead && IsFrameController && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
     public bool CanReadWaveform => CanRead && IsFrameController && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
     public bool CanExportDevice => _deviceReadAt != default && IsDeviceConnected && !IsBusy;
-    public bool CanExportProtection => _protectionReadAt != default && IsDeviceConnected && !IsBusy && IsMoldedCaseCircuitBreaker;
+    public bool CanExportProtection => _protectionReadAt != default && IsDeviceConnected && !IsBusy && HasProtectionData;
     public bool CanExportFault => _faultReadAt != default && IsDeviceConnected && !IsBusy && IsFrameController;
     public bool CanExportWaveform => _waveformData is not null && IsDeviceConnected && !IsBusy && IsFrameController;
     public WaveformData? CurrentWaveformData => _waveformData;
@@ -430,8 +431,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         if (!CanReadProtection || DeviceAddress is not int address) return;
         await RunBusyAsync(async token =>
         {
-            var result = await _protectionService.ReadAsync((byte)address, token);
-            var definitions = DeviceProfileCatalog.MoldedCaseCircuitBreaker.ProtectionData!.Definitions;
+            var profile = DeviceProfileCatalog.Get(SelectedDeviceType);
+            var definitions = profile.ProtectionData?.Definitions
+                ?? throw new InvalidOperationException($"{profile.DisplayName}保护数据目录未配置。");
+            var result = await _protectionService.ReadAsync(
+                (byte)address, SelectedDeviceType, WordOrder.HighWordFirst, SelectedControllerSeries, token);
             Merge(
                 ProtectionRows,
                 ForTable(result.Values, definitions),
@@ -621,6 +625,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         this.RaisePropertyChanged(nameof(SelectedDeviceType));
         this.RaisePropertyChanged(nameof(IsFrameController));
         this.RaisePropertyChanged(nameof(IsMoldedCaseCircuitBreaker));
+        this.RaisePropertyChanged(nameof(HasProtectionData));
         this.RaisePropertyChanged(nameof(CurrentWaveformData));
         this.RaisePropertyChanged(nameof(HasWaveformData));
         this.RaisePropertyChanged(nameof(HasNoWaveformData));
@@ -668,7 +673,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         if (CanExportProtection)
             ExportRequested?.Invoke(this, new ExportRequest(
-                "塑壳断路器保护数据", Flatten(ProtectionRows), _protectionReadAt));
+                $"{SelectedDevice.DisplayName}保护数据", Flatten(ProtectionRows), _protectionReadAt));
     }
     private void RequestFaultExport()
     {

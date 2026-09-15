@@ -124,6 +124,7 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
                  {
                      (1, 7), (0x16, 8), (0x1E, 2), (0x32, 4),
                      (256, 3), (268, 3), (336, 8), (352, 6), (512, 12), (768, 18),
+                     (1280, 1), (1282, 7), (1296, 6),
                  })
             for (var i = 0; i < count; i++) map[(ushort)(start + i)] = 0;
         // 塑壳断路器示例。
@@ -139,6 +140,13 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         SetUInt32(map,352,2301); SetUInt32(map,354,2310); SetUInt32(map,356,2294);
         // 1552.bit0～bit7=4，对应 BW1/BW3 的 630A；bit8～bit11=3 模拟非零框架等级。
         map[512]=0x0002; map[784]=0x0444; map[1552]=0x0204; map[1031]=128;
+        // 框架控制器保护数据；1793.bit12～bit10=3，按地电流型解析。
+        map[1793]=0x0C00;
+        map[1280]=630;
+        map[1282]=945; map[1283]=20; map[1284]=1260; map[1285]=6300;
+        map[1286]=1; map[1287]=315; map[1288]=25;
+        map[1296]=250; map[1297]=200; map[1298]=0x141E; map[1299]=0x141E;
+        map[1300]=100; map[1301]=1000;
         LoadWaveformRegisters(map);
         return map;
     }

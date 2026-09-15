@@ -365,6 +365,30 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task Frame_controller_exposes_and_reads_protection_data_tab()
+    {
+        var protectionService=new RecordingProtectionDataService();
+        await using var viewModel=CreateViewModel(
+            ["COM10"],new AppSettings(PortName:"COM10",DeviceType:DeviceType.FrameController),
+            deviceService:new ConnectedDeviceDataService(),protectionService:protectionService);
+
+        Assert.True(viewModel.IsFrameController);
+        Assert.True(viewModel.HasProtectionData);
+        Assert.Contains(viewModel.ProtectionRows.SelectMany(RowItems),
+            item=>item.Name=="过载动作值" && item.DisplayValue=="— A");
+
+        await viewModel.ToggleSerialCommand.Execute().ToTask();
+        await viewModel.TestConnectionCommand.Execute().ToTask();
+        Assert.True(viewModel.CanReadProtection);
+        await viewModel.ReadProtectionCommand.Execute().ToTask();
+
+        Assert.Equal(DeviceType.FrameController,protectionService.LastDeviceType);
+        Assert.Equal("630 A",viewModel.ProtectionRows.SelectMany(RowItems)
+            .Single(item=>item.Name=="过载动作值").DisplayValue);
+        Assert.True(viewModel.CanExportProtection);
+    }
+
+    [Fact]
     public async Task Address_scanner_uses_probe_register_for_selected_device_type()
     {
         var client=new ProbeRecordingClient();
@@ -513,19 +537,25 @@ public sealed class MainViewModelTests
 
     private sealed class FakeProtectionDataService : IProtectionDataService
     {
-        public Task<DataReadResult> ReadAsync(byte slaveAddress,CancellationToken cancellationToken=default)=>
+        public Task<DataReadResult> ReadAsync(byte slaveAddress,DeviceType deviceType,WordOrder wordOrder,
+            BreakerSeries controllerSeries,CancellationToken cancellationToken=default)=>
             Task.FromResult(new DataReadResult([],[],DateTimeOffset.Now));
     }
 
     private sealed class RecordingProtectionDataService : IProtectionDataService
     {
         public int Calls { get; private set; }
+        public DeviceType? LastDeviceType { get; private set; }
 
-        public Task<DataReadResult> ReadAsync(byte slaveAddress,CancellationToken cancellationToken=default)
+        public Task<DataReadResult> ReadAsync(byte slaveAddress,DeviceType deviceType,WordOrder wordOrder,
+            BreakerSeries controllerSeries,CancellationToken cancellationToken=default)
         {
             Calls++;
+            LastDeviceType=deviceType;
             var value=new DecodedValue(
-                "长延时电流设定值 Ir1",[0x0016],"100","A","×1",[],ParseStatus.Success,null,
+                deviceType==DeviceType.FrameController ? "过载动作值" : "长延时电流设定值 Ir1",
+                deviceType==DeviceType.FrameController ? [1280] : [0x0016],
+                deviceType==DeviceType.FrameController ? "630" : "100","A","×1",[],ParseStatus.Success,null,
                 DateTimeOffset.Now);
             return Task.FromResult(new DataReadResult([value],[],DateTimeOffset.Now));
         }
