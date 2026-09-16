@@ -695,10 +695,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     };
     private static IReadOnlyList<DecodedValue> Flatten(IEnumerable<DataRowViewModel> rows) => rows.SelectMany(r => new[] { r.Left, r.Right }.OfType<DataItemViewModel>()).Select(x => x.Value).ToArray();
     private static IReadOnlyList<DecodedValue> CreatePlaceholders(IEnumerable<RegisterDefinition> definitions) => definitions
-        .Select(definition => definition.IsReadable
-            ? new DecodedValue(definition.Name, definition.Addresses, "—", definition.Unit, "尚未读取", [], ParseStatus.ReadFailed, "尚未读取", DateTimeOffset.MinValue)
-            : new DecodedValue(definition.Name, definition.Addresses, definition.FixedValue ?? string.Empty,
-                definition.Unit, definition.FormatDescription, [], ParseStatus.Success, null, DateTimeOffset.MinValue))
+        .Select(definition => new DecodedValue(
+            definition.Name, definition.Addresses, "—", definition.Unit, "尚未读取", [],
+            ParseStatus.ReadFailed, "尚未读取", DateTimeOffset.MinValue))
         .ToArray();
     private Task SaveSettingsAsync()
     {

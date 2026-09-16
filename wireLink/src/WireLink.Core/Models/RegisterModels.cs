@@ -190,9 +190,7 @@ public sealed record RegisterDefinition(
     ValueTransform Transform,
     decimal Multiplier = 1m,
     string FormatDescription = "×1",
-    bool ProtocolConfirmed = true,
-    bool IsReadable = true,
-    string? FixedValue = null);
+    bool ProtocolConfirmed = true);
 
 /// <summary>单个 16 位寄存器的原始采样。</summary>
 public sealed record RawRegisterSample(ushort Address, ushort Value, DateTimeOffset ReadAt)

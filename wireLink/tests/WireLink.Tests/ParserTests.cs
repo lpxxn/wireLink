@@ -476,7 +476,6 @@ public sealed class ParserTests
         Assert.Equal("1234", value.DisplayValue);
         Assert.Single(value.RawSamples);
         Assert.Equal(ParseStatus.Success, value.Status);
-        Assert.True(definition.IsReadable);
         Assert.Equal(string.Empty, definition.Unit);
     }
 

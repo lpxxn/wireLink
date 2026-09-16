@@ -53,21 +53,6 @@ public sealed class RegisterParser
         var values = new List<DecodedValue>(definitions.Count);
         foreach (var definition in definitions)
         {
-            if (!definition.IsReadable)
-            {
-                values.Add(new DecodedValue(
-                    definition.Name,
-                    definition.Addresses,
-                    definition.FixedValue ?? string.Empty,
-                    definition.Unit,
-                    definition.FormatDescription,
-                    [],
-                    ParseStatus.Success,
-                    null,
-                    samples.Values.Select(sample => sample.ReadAt).DefaultIfEmpty(DateTimeOffset.Now).Max()));
-                continue;
-            }
-
             var raw = definition.Addresses
                 .Where(samples.ContainsKey)
                 .Select(address => samples[address])
