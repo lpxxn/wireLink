@@ -414,7 +414,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             var definitions = DeviceProfileCatalog.Get(SelectedDeviceType).DeviceData.Definitions;
             Merge(
                 DeviceRows,
-                ForTable(result.Values, definitions),
+                result.Values,
                 result.Errors.Count > 0 ? "本区间读取失败，显示上次成功值" : null);
             _deviceReadAt = result.ReadAt;
             if (result.Errors.Count > 0)
@@ -438,7 +438,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
                 (byte)address, SelectedDeviceType, WordOrder.HighWordFirst, SelectedControllerSeries, token);
             Merge(
                 ProtectionRows,
-                ForTable(result.Values, definitions),
+                result.Values,
                 result.Errors.Count > 0 ? "本区间读取失败，显示上次成功值" : null);
             _protectionReadAt = result.ReadAt;
             Notice = result.Errors.Count == 0
@@ -463,7 +463,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             Merge(
                 FaultRows,
-                ForTable(result.Values, RegisterCatalog.FaultDefinitions),
+                result.Values,
                 result.Errors.Count > 0 ? "本字段读取失败，显示上次成功值" : null);
             _faultReadAt = result.ReadAt;
             _lastReadFaultRecordType = selectedType;
@@ -552,7 +552,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             // $"{DescribeFaultRecordType(timing.RecordType)}第 {timing.RecordIndex} 条 · " +
             // $"故障时间 {FaultRecordTimeDecoder.Format(timing.FaultRecordTime)} + 软件补充 {timing.SoftwareMilliseconds} ms（非设备实测） · " +
             //  $"录波 {timing.WaveformStartTime:yyyy-MM-dd HH:mm:ss.fff}～{data.WaveformEndTime:HH:mm:ss.fffffff}";
-              $"录波 {timing.WaveformStartTime:yyyy-MM-dd HH:mm:ss.fff}";
+              $"时间 {timing.WaveformStartTime:yyyy-MM-dd HH:mm:ss.fff}";
             lock (progressStateLock)
             {
                 progressCompleted = true;
@@ -695,23 +695,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     };
     private static IReadOnlyList<DecodedValue> Flatten(IEnumerable<DataRowViewModel> rows) => rows.SelectMany(r => new[] { r.Left, r.Right }.OfType<DataItemViewModel>()).Select(x => x.Value).ToArray();
     private static IReadOnlyList<DecodedValue> CreatePlaceholders(IEnumerable<RegisterDefinition> definitions) => definitions
-        .Where(definition => definition.ShowInTable)
         .Select(definition => definition.IsReadable
             ? new DecodedValue(definition.Name, definition.Addresses, "—", definition.Unit, "尚未读取", [], ParseStatus.ReadFailed, "尚未读取", DateTimeOffset.MinValue)
             : new DecodedValue(definition.Name, definition.Addresses, definition.FixedValue ?? string.Empty,
                 definition.Unit, definition.FormatDescription, [], ParseStatus.Success, null, DateTimeOffset.MinValue))
         .ToArray();
-    private static IReadOnlyList<DecodedValue> ForTable(
-        IReadOnlyList<DecodedValue> values,
-        IEnumerable<RegisterDefinition> definitions)
-    {
-        var hidden = definitions
-            .Where(definition => !definition.ShowInTable)
-            .Select(definition => definition.Name)
-            .ToHashSet(StringComparer.Ordinal);
-        return hidden.Count == 0 ? values : values.Where(value => !hidden.Contains(value.Name)).ToArray();
-    }
-
     private Task SaveSettingsAsync()
     {
         if (DeviceAddress is not int deviceAddress || RefreshSeconds is not int refreshSeconds ||

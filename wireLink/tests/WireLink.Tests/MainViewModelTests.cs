@@ -113,32 +113,6 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
-    public async Task Reading_device_data_does_not_add_hidden_definitions_to_table()
-    {
-        var readAt=DateTimeOffset.Now;
-        DecodedValue[] values=
-        [
-            new("A 相电压",[256],"227","V","÷10",[],ParseStatus.Success,null,readAt),
-            new("当前故障数据 1",[517],"42",string.Empty,"原始值",[],ParseStatus.Success,null,readAt),
-        ];
-        await using var viewModel=CreateViewModel(
-            ["COM10"],
-            new AppSettings(PortName:"COM10"),
-            deviceService:new ConnectedDeviceDataService(values));
-        await viewModel.ToggleSerialCommand.Execute().ToTask();
-        await viewModel.TestConnectionCommand.Execute().ToTask();
-
-        await viewModel.ReadDeviceCommand.Execute().ToTask();
-
-        var names=viewModel.DeviceRows
-            .SelectMany(row=>new[] { row.Left, row.Right }.OfType<DataItemViewModel>())
-            .Select(item=>item.Name)
-            .ToArray();
-        Assert.Contains("A 相电压",names);
-        Assert.DoesNotContain("当前故障数据 1",names);
-    }
-
-    [Fact]
     public async Task Open_failure_is_exposed_as_a_friendly_visible_notice()
     {
         var trace=new RecordingProtocolTrace();

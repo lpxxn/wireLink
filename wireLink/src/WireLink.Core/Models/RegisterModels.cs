@@ -182,7 +182,6 @@ public enum FaultRecordType : byte
 }
 
 /// <summary>一个逻辑字段的协议元数据。</summary>
-/// <param name="ShowInTable">为 false 时仍读取/解析，但不在界面表格与导出中展示。</param>
 public sealed record RegisterDefinition(
     string Name,
     IReadOnlyList<ushort> Addresses,
@@ -192,7 +191,6 @@ public sealed record RegisterDefinition(
     decimal Multiplier = 1m,
     string FormatDescription = "×1",
     bool ProtocolConfirmed = true,
-    bool ShowInTable = true,
     bool IsReadable = true,
     string? FixedValue = null);
 
