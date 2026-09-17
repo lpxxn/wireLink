@@ -1,0 +1,113 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WireLink.App.Views.AboutWindow"
+        Width="420"
+        Height="280"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Title="关于"
+        KeyDown="OnDialogKeyDown">
+
+  <Window.Styles>
+    <Style Selector="Button.dialog-close">
+      <Setter Property="Width" Value="34"/>
+      <Setter Property="Height" Value="34"/>
+      <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="17"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#667085"/>
+      <Setter Property="FontSize" Value="21"/>
+      <Setter Property="FontWeight" Value="Normal"/>
+    </Style>
+    <Style Selector="Button.dialog-close:pointerover">
+      <Setter Property="Background" Value="#EEF1F6"/>
+      <Setter Property="Foreground" Value="#344054"/>
+    </Style>
+    <Style Selector="Button.dialog-close:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#EEF1F6"/>
+      <Setter Property="Foreground" Value="#344054"/>
+    </Style>
+    <Style Selector="Button.dialog-primary">
+      <Setter Property="Width" Value="96"/>
+      <Setter Property="MinHeight" Value="38"/>
+      <Setter Property="Padding" Value="16,8"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Background" Value="#3D67E8"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.dialog-primary:pointerover">
+      <Setter Property="Background" Value="#315BD8"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.dialog-primary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#315BD8"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="TextBlock.about-label">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="#7A8495"/>
+    </Style>
+    <Style Selector="TextBlock.about-value">
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="FontWeight" Value="Medium"/>
+      <Setter Property="Foreground" Value="#1F2A37"/>
+    </Style>
+  </Window.Styles>
+
+  <Border Margin="10"
+          Padding="20"
+          Background="#FFFFFFFF"
+          BorderBrush="#E4E8F0"
+          BorderThickness="1"
+          CornerRadius="16"
+          BoxShadow="0 12 32 0 #300F172A">
+    <Grid RowDefinitions="Auto,*,Auto">
+      <Grid ColumnDefinitions="*,Auto">
+        <Grid ColumnDefinitions="Auto,*"
+              ColumnSpacing="12"
+              VerticalAlignment="Center"
+              PointerPressed="OnHeaderPointerPressed">
+          <StackPanel Grid.Column="1"
+                      VerticalAlignment="Center"
+                      Spacing="2">
+            <TextBlock Text="关于本软件"
+                       FontSize="17"
+                       Foreground="#7A8495"/>
+          </StackPanel>
+        </Grid>
+
+      </Grid>
+
+      <Border Grid.Row="1"
+              Margin="0,18,0,0"
+              Padding="16,14"
+              Background="#F7F9FC"
+              BorderBrush="#E4E8F0"
+              BorderThickness="1"
+              CornerRadius="10">
+        <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+          <TextBlock Classes="about-label" Text="产品"/>
+          <TextBlock x:Name="ProductValue" Grid.Column="1" Classes="about-value"/>
+          <TextBlock Grid.Row="1" Classes="about-label" Text="版本"/>
+          <TextBlock x:Name="VersionValue" Grid.Row="1" Grid.Column="1" Classes="about-value"/>
+          <TextBlock Grid.Row="2" Classes="about-label" Text="公司"/>
+          <TextBlock x:Name="CompanyValue" Grid.Row="2" Grid.Column="1" Classes="about-value"/>
+        </Grid>
+      </Border>
+
+      <Button Grid.Row="2"
+              Classes="dialog-primary"
+              Margin="0,18,0,0"
+              HorizontalAlignment="Right"
+              IsDefault="True"
+              Content="确定"
+              Click="OnCloseClick"/>
+    </Grid>
+  </Border>
+</Window>

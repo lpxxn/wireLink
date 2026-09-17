@@ -245,6 +245,18 @@
             </Grid>
 
             <StackPanel Spacing="8">
+              <TextBlock Classes="label" Text="设备类型"/>
+              <ComboBox Classes="input"
+                        ItemsSource="{Binding DeviceOptions}"
+                        SelectedItem="{Binding SelectedDevice}"
+                        IsEnabled="{Binding CanSelectDeviceType}"
+                        HorizontalAlignment="Stretch">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DeviceTypeOption">
+                    <TextBlock Text="{Binding DisplayName}"/>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
               <!--<TextBlock Classes="label" Text="设备地址"/> -->
               <NumericUpDown Classes="input"
                              Value="{Binding DeviceAddress}"
@@ -273,12 +285,14 @@
 
             <Expander Header="高级通信设置">
               <StackPanel Spacing="9" Margin="0,12,0,2">
-                <TextBlock Classes="label" Text="控制器"/>
-                <ComboBox Classes="input"
-                          ItemsSource="{Binding ControllerOptions}"
-                          SelectedItem="{Binding ControllerName}"
-                          IsEnabled="{Binding IsSerialOpen}"
-                          HorizontalAlignment="Stretch"/>
+                <StackPanel Spacing="9" IsVisible="{Binding IsFrameController}">
+                  <TextBlock Classes="label" Text="控制器"/>
+                  <ComboBox Classes="input"
+                            ItemsSource="{Binding ControllerOptions}"
+                            SelectedItem="{Binding ControllerName}"
+                            IsEnabled="{Binding IsSerialOpen}"
+                            HorizontalAlignment="Stretch"/>
+                </StackPanel>
                 <TextBlock Classes="label" Text="请求超时（ms）" Margin="0,4,0,0"/>
                 <NumericUpDown Classes="input"
                                Value="{Binding ReadTimeoutMilliseconds}"
@@ -286,14 +300,16 @@
                                Maximum="10000"
                                Increment="100"
                                HorizontalAlignment="Stretch"/>
-                <TextBlock Classes="label" Text="故障记录就绪等待（ms）" Margin="0,4,0,0"/>
-                <NumericUpDown Classes="input"
-                               Value="{Binding FaultDelayMilliseconds}"
-                               Minimum="0"
-                               Maximum="2000"
-                               Increment="50"
-                               ToolTip.Tip="写入 785 后等待芯片准备记录数据；建议约 100ms。"
-                               HorizontalAlignment="Stretch"/>
+                <StackPanel Spacing="9" IsVisible="{Binding IsFrameController}">
+                  <TextBlock Classes="label" Text="故障记录就绪等待（ms）" Margin="0,4,0,0"/>
+                  <NumericUpDown Classes="input"
+                                 Value="{Binding FaultDelayMilliseconds}"
+                                 Minimum="0"
+                                 Maximum="2000"
+                                 Increment="50"
+                                 ToolTip.Tip="写入 785 后等待芯片准备记录数据；建议约 100ms。"
+                                 HorizontalAlignment="Stretch"/>
+                </StackPanel>
               </StackPanel>
             </Expander>
           </StackPanel>
@@ -302,7 +318,7 @@
 
       <!-- 数据工作区：标签、操作工具栏和表格形成单一连续面板。 -->
       <Border Grid.Column="1" Classes="panel" Padding="0" ClipToBounds="True">
-        <TabControl x:Name="DataTabs">
+        <TabControl x:Name="DataTabs" SelectedIndex="{Binding SelectedDataTabIndex}">
           <TabItem Header="设备数据">
             <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20">
               <Grid ColumnDefinitions="92,Auto,Auto,*,Auto,Auto" ColumnSpacing="10">
@@ -381,7 +397,7 @@
             </Grid>
           </TabItem>
 
-          <TabItem x:Name="WaveformTab" Header="录波数据">
+          <TabItem x:Name="WaveformTab" Header="录波数据" IsVisible="{Binding IsFrameController}">
             <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20" RowSpacing="12">
               <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" ColumnSpacing="12">
                 <CheckBox IsChecked="{Binding ShowPhaseA}" Content="A 相" VerticalAlignment="Center"/>
@@ -390,7 +406,7 @@
                 <Button Grid.Column="4"
                         Classes="secondary"
                         Command="{Binding ReadWaveformCommand}"
-                        IsEnabled="{Binding CanRead}"
+                        IsEnabled="{Binding CanReadWaveform}"
                         Content="立即读取"/>
                 <Button Grid.Column="5"
                         Classes="primary"
@@ -403,7 +419,7 @@
                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="3">
                   <TextBlock Text="{Binding WaveformSummary}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                   <TextBlock Grid.Row="1" Text="{Binding WaveformProgressText}" Opacity=".62" TextWrapping="Wrap"/>
-                  <TextBlock Grid.Column="1" Grid.RowSpan="2" Text="单位：原始 AD" Foreground="#3159D5" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="1" Grid.RowSpan="2" Text="单位：安培 A" Foreground="#3159D5" VerticalAlignment="Center"/>
                 </Grid>
               </Border>
 
@@ -421,7 +437,7 @@
                       <TextBlock Text="〰" FontSize="28" Foreground="#3D67E8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <TextBlock Text="尚未读取录波数据" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="完整读取 18 个块后显示 A/B/C 三相曲线；读取失败不会覆盖上一次完整结果。"
+                    <TextBlock Text="固定读取故障第 0 条记录（最近一条）的时间，再读取框架等级和 18 个录波块；没有有效故障时间时不会读取录波。"
                                Opacity=".56" MaxWidth="560" TextAlignment="Center" TextWrapping="Wrap"/>
                   </StackPanel>
                 </Grid>
@@ -429,7 +445,7 @@
             </Grid>
           </TabItem>
 
-          <TabItem Header="故障数据">
+          <TabItem Header="故障数据" IsVisible="{Binding IsFrameController}">
             <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20">
               <Grid ColumnDefinitions="Auto,96,Auto,*,Auto,Auto" ColumnSpacing="8">
                 <ComboBox Classes="input"
@@ -499,6 +515,67 @@
                         </Border>
                         <Border Grid.Column="3" BorderBrush="#E6EAF2" BorderThickness="1,0,1,1" Padding="14,9">
                           <TextBlock Text="{Binding Right.DisplayValue}" ToolTip.Tip="{Binding Right.Warning}" VerticalAlignment="Center" FontWeight="Medium"/>
+                        </Border>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Grid>
+          </TabItem>
+
+          <TabItem Header="保护数据" IsVisible="{Binding HasProtectionData}">
+            <Grid RowDefinitions="Auto,Auto,*" Margin="20,14,20,20">
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                <Button Grid.Column="1"
+                        Classes="secondary"
+                        Command="{Binding ReadProtectionCommand}"
+                        IsEnabled="{Binding CanReadProtection}"
+                        Content="立即读取"/>
+                <Button Grid.Column="2"
+                        Classes="primary"
+                        Command="{Binding ExportProtectionCommand}"
+                        IsEnabled="{Binding CanExportProtection}"
+                        Content="导出 Excel"/>
+              </Grid>
+
+              <Border Grid.Row="1"
+                      Background="#EEF3FF"
+                      BorderBrush="#E1E7F2"
+                      BorderThickness="1"
+                      CornerRadius="10,10,0,0"
+                      Margin="0,14,0,0"
+                      MinHeight="42">
+                <Grid ColumnDefinitions="2*,1.15*,2*,1.15*">
+                  <TextBlock Classes="table-heading" Text="名称" Margin="14,0"/>
+                  <TextBlock Grid.Column="1" Classes="table-heading" Text="数值" Margin="14,0"/>
+                  <TextBlock Grid.Column="2" Classes="table-heading" Text="名称" Margin="14,0"/>
+                  <TextBlock Grid.Column="3" Classes="table-heading" Text="数值" Margin="14,0"/>
+                </Grid>
+              </Border>
+
+              <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding ProtectionRows}" MinWidth="760">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DataRowViewModel">
+                      <Grid ColumnDefinitions="2*,1.15*,2*,1.15*" MinHeight="44">
+                        <Border BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                          <TextBlock Text="{Binding Left.Name}" ToolTip.Tip="{Binding Left.Tooltip}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </Border>
+                        <Border Grid.Column="1" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Left.DisplayValue}" VerticalAlignment="Center" FontWeight="Medium"/>
+                            <TextBlock Text="⚠" IsVisible="{Binding Left.HasWarning}" Foreground="#E4A11B" ToolTip.Tip="{Binding Left.Warning}"/>
+                          </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" BorderBrush="#E6EAF2" BorderThickness="1,0,0,1" Padding="14,9">
+                          <TextBlock Text="{Binding Right.Name}" ToolTip.Tip="{Binding Right.Tooltip}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </Border>
+                        <Border Grid.Column="3" BorderBrush="#E6EAF2" BorderThickness="1,0,1,1" Padding="14,9">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Right.DisplayValue}" VerticalAlignment="Center" FontWeight="Medium"/>
+                            <TextBlock Text="⚠" IsVisible="{Binding Right.HasWarning, FallbackValue=False}" Foreground="#E4A11B" ToolTip.Tip="{Binding Right.Warning}"/>
+                          </StackPanel>
                         </Border>
                       </Grid>
                     </DataTemplate>

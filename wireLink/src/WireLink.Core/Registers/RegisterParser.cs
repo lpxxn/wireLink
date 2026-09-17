@@ -104,6 +104,22 @@ public sealed class RegisterParser
                 ValueTransform.BcdMinuteSecond => DecodeBcdPair((ushort)numeric, "分", "秒", 0),
                 ValueTransform.FaultRecordStatus => (DecodeRecordStatus((ushort)numeric), "按 5.6 位字段解析", ParseStatus.Success, null),
                 ValueTransform.RecordSelector => (DecodeSelector((ushort)numeric), "L=记录类型，H=第几条记录", ParseStatus.Success, null),
+                ValueTransform.MoldedCasePhase => DecodeMoldedCasePhase(numeric),
+                ValueTransform.MoldedCaseFaultType => DecodeMoldedCaseFaultType(numeric),
+                ValueTransform.MoldedCaseLongDelayTime => DecodeMoldedCaseLongDelayTime(numeric),
+                ValueTransform.MoldedCaseShortDelayTime => DecodeMoldedCaseShortDelayTime(numeric),
+                ValueTransform.MoldedCaseGroundTime => DecodeMoldedCaseGroundTime(numeric),
+                ValueTransform.MoldedCasePreAlarmTime => DecodeMoldedCasePreAlarmTime(numeric),
+                ValueTransform.FrameGroundProtectionMode => DecodeFrameGroundProtectionMode(numeric),
+                ValueTransform.FrameNPhaseProtection => DecodeFrameNPhaseProtection(numeric),
+                ValueTransform.FrameGroundOrLeakageCurrent =>
+                    DecodeFrameGroundOrLeakageCurrent(numeric, allSamples, controllerSeries),
+                ValueTransform.FrameGroundOrLeakageActionTime =>
+                    DecodeFrameGroundOrLeakageActionTime(numeric, allSamples),
+                ValueTransform.LowByte => DecodeByte(
+                    numeric, highByte: false, definition.Multiplier, definition.ProtocolConfirmed),
+                ValueTransform.HighByte => DecodeByte(
+                    numeric, highByte: true, definition.Multiplier, definition.ProtocolConfirmed),
                 _ => throw new ArgumentOutOfRangeException(),
             };
 
@@ -234,6 +250,222 @@ public sealed class RegisterParser
     {
         return (raw.ToString(CultureInfo.InvariantCulture), "百分比原值直接显示", ParseStatus.Success, null);
     }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCasePhase(uint raw)
+    {
+        var phase = raw switch
+        {
+            0 => "A相",
+            1 => "B相",
+            2 => "C相",
+            3 => "N相",
+            _ => null,
+        };
+        return phase is not null
+            ? (phase, $"相别编码 {raw}", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "相别");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCaseFaultType(uint raw)
+    {
+        var faultType = raw switch
+        {
+            0 => "无故障",
+            1 => "瞬时故障",
+            2 => "漏电故障",
+            4 => "接地故障",
+            8 => "短延时故障",
+            16 => "长延时故障",
+            32 or 33 or 34 or 36 or 40 or 48 => "故障未读取",
+            _ => null,
+        };
+        return faultType is not null
+            ? (faultType, $"故障类型编码 {raw}", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "故障类型");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCaseLongDelayTime(uint raw)
+    {
+        if (raw == 0) return ("OFF", "0=OFF", ParseStatus.Success, null);
+        return raw <= 150
+            ? ($"{raw} s", $"设定值 {raw}=时间 {raw} s", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "长延时时间");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCaseShortDelayTime(uint raw)
+    {
+        var value = raw switch
+        {
+            0 => "OFF",
+            3 => "0.06 s",
+            5 => "0.1 s",
+            10 => "0.2 s",
+            15 => "0.3 s",
+            _ => null,
+        };
+        return value is not null
+            ? (value, $"按短延时时间表映射原值 {raw}", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "短延时时间");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCaseGroundTime(uint raw)
+    {
+        if (raw <= 7)
+        {
+            var seconds = (raw + 1) / 10m;
+            return ($"{seconds.ToString("0.0", CultureInfo.InvariantCulture)} s",
+                $"按接地时间表映射原值 {raw}", ParseStatus.Success, null);
+        }
+        return raw == 8
+            ? ("报警", "接地时间原值 8=报警", ParseStatus.Success, null)
+            : UnknownMoldedCaseValue(raw, "接地时间");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeMoldedCasePreAlarmTime(uint raw)
+    {
+        if (raw <= 9)
+        {
+            var seconds = (raw + 1) / 10m;
+            return ($"{seconds.ToString("0.0", CultureInfo.InvariantCulture)} s",
+                $"按预报警时间表映射原值 {raw}", ParseStatus.Success, null);
+        }
+        return UnknownMoldedCaseValue(raw, "预报警时间");
+    }
+
+    private static (string, string, ParseStatus, string?) UnknownMoldedCaseValue(uint raw, string field) =>
+        (raw.ToString(CultureInfo.InvariantCulture), "协议未定义，保留十进制原始值",
+            ParseStatus.ProtocolUnconfirmed, $"协议未定义{field}原值 {raw}");
+
+    private static (string, string, ParseStatus, string?) DecodeFrameGroundProtectionMode(uint raw)
+    {
+        var mode = (raw & RegisterCatalog.GroundProtectionModeMask) >> 10;
+        return mode switch
+        {
+            0 => ("关闭", $"1793=0x{raw:X4}；bit12～bit10=0", ParseStatus.Success, null),
+            1 => ("漏电型", $"1793=0x{raw:X4}；bit12～bit10=1", ParseStatus.Success, null),
+            2 => ("差值型", $"1793=0x{raw:X4}；bit12～bit10=2", ParseStatus.ProtocolUnconfirmed,
+                "差值型保护参数换算尚未实现"),
+            3 => ("地电流型", $"1793=0x{raw:X4}；bit12～bit10=3", ParseStatus.Success, null),
+            _ => ($"保留值 {mode}", $"1793=0x{raw:X4}；bit12～bit10={mode}",
+                ParseStatus.ProtocolUnconfirmed, "协议未定义该接地保护方式"),
+        };
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeFrameNPhaseProtection(uint raw)
+    {
+        var value = raw switch
+        {
+            0 => "50%",
+            1 => "100%",
+            2 => "160%",
+            3 => "200%",
+            4 => "关闭",
+            _ => null,
+        };
+        return value is not null
+            ? (value, $"1286={raw}；按 5.14 枚举", ParseStatus.Success, null)
+            : (raw.ToString(CultureInfo.InvariantCulture), $"1286={raw}；未定义枚举",
+                ParseStatus.ProtocolUnconfirmed, $"协议未定义 N 相保护设置值 {raw}");
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeFrameGroundOrLeakageCurrent(
+        uint raw,
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        BreakerSeries controllerSeries)
+    {
+        if (!TryGetGroundProtectionMode(samples, out var mode, out var modeRaw))
+            return MissingGroundProtectionMode(raw);
+
+        if (mode == 1)
+        {
+            var value = raw * 0.01m;
+            return ($"{value.ToString("0.00", CultureInfo.InvariantCulture)} A",
+                $"1793=0x{modeRaw:X4}；bit12～bit10=1（漏电型）；{raw} × 0.01A",
+                ParseStatus.Success, null);
+        }
+
+        if (mode == 3)
+        {
+            var result = ScaleByCurrentRatio(raw, samples, controllerSeries);
+            return result.Item3 == ParseStatus.Success
+                ? ($"{result.Item1} A",
+                    $"1793=0x{modeRaw:X4}；bit12～bit10=3（地电流型）；{result.Item2}",
+                    result.Item3, result.Item4)
+                : result;
+        }
+
+        return UnsupportedGroundProtectionMode(raw, mode, modeRaw);
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeFrameGroundOrLeakageActionTime(
+        uint raw,
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples)
+    {
+        if (!TryGetGroundProtectionMode(samples, out var mode, out var modeRaw))
+            return MissingGroundProtectionMode(raw);
+
+        if (mode == 3)
+            return ($"{(raw * 0.01m).ToString("0.00", CultureInfo.InvariantCulture)} s",
+                $"1793=0x{modeRaw:X4}；bit12～bit10=3（地电流型）；{raw} × 0.01s",
+                ParseStatus.Success, null);
+
+        if (mode == 1)
+        {
+            string[] values = ["瞬时", "0.06 s", "0.08 s", "0.17 s", "0.25 s", "0.33 s",
+                "0.42 s", "0.50 s", "0.58 s", "0.67 s", "0.75 s", "0.83 s"];
+            return raw < (uint)values.Length
+                ? (values[(int)raw], $"1793=0x{modeRaw:X4}；bit12～bit10=1（漏电型）；按 5.15 枚举 {raw}",
+                    ParseStatus.Success, null)
+                : (raw.ToString(CultureInfo.InvariantCulture),
+                    $"1793=0x{modeRaw:X4}；bit12～bit10=1（漏电型）；5.15 未定义枚举 {raw}",
+                    ParseStatus.ProtocolUnconfirmed, $"协议未定义漏电保护动作时间值 {raw}");
+        }
+
+        return UnsupportedGroundProtectionMode(raw, mode, modeRaw);
+    }
+
+    private static (string, string, ParseStatus, string?) DecodeByte(
+        uint raw,
+        bool highByte,
+        decimal multiplier,
+        bool confirmed)
+    {
+        var value = highByte ? (raw >> 8) & 0xFF : raw & 0xFF;
+        var part = highByte ? "高 8 位" : "低 8 位";
+        var scaled = Scale(value, multiplier, confirmed);
+        return (scaled.Item1,
+            $"0x{raw:X4} 的{part}={value}；{scaled.Item2}", scaled.Item3, scaled.Item4);
+    }
+
+    private static bool TryGetGroundProtectionMode(
+        IReadOnlyDictionary<ushort, RawRegisterSample> samples,
+        out uint mode,
+        out ushort raw)
+    {
+        if (!samples.TryGetValue(RegisterCatalog.GroundProtectionModeRegisterAddress, out var sample))
+        {
+            mode = 0;
+            raw = 0;
+            return false;
+        }
+
+        raw = sample.Value;
+        mode = (uint)((raw & RegisterCatalog.GroundProtectionModeMask) >> 10);
+        return true;
+    }
+
+    private static (string, string, ParseStatus, string?) MissingGroundProtectionMode(uint raw) =>
+        (raw.ToString(CultureInfo.InvariantCulture), "未换算；缺少寄存器 1793",
+            ParseStatus.InvalidData, "未读取到 1793，无法判断按漏电还是接地解释");
+
+    private static (string, string, ParseStatus, string?) UnsupportedGroundProtectionMode(
+        uint raw, uint mode, ushort modeRaw) =>
+        (raw.ToString(CultureInfo.InvariantCulture),
+            $"1793=0x{modeRaw:X4}；bit12～bit10={mode}；原始值 {raw} 未换算",
+            ParseStatus.ProtocolUnconfirmed,
+            mode == 0 ? "接地保护方式为关闭，保留原始值"
+                : mode == 2 ? "差值型参数换算尚未实现，保留原始值"
+                : $"接地保护方式 {mode} 为协议保留值，保留原始值");
 
     /// <summary>
     /// 报警事件按已确认的 5.5.2 规则只有数据 0 有效：
@@ -374,21 +606,13 @@ public sealed class RegisterParser
         if (samples.Count != 3)
             throw new FormatException("完整时间必须包含年月、日时、分秒三个寄存器。");
 
-        var year = 2000 + DecodeBcd((byte)(samples[0].Value >> 8));
-        var month = DecodeBcd((byte)samples[0].Value);
-        var day = DecodeBcd((byte)(samples[1].Value >> 8));
-        var hour = DecodeBcd((byte)samples[1].Value);
-        var minute = DecodeBcd((byte)(samples[2].Value >> 8));
-        var second = DecodeBcd((byte)samples[2].Value);
-
-        if (month is < 1 or > 12) throw new FormatException($"无效月份 {month}");
-        if (day is < 1 or > 31) throw new FormatException($"无效日期 {day}");
-        if (hour > 23) throw new FormatException($"无效小时 {hour}");
-        if (minute > 59) throw new FormatException($"无效分钟 {minute}");
-        if (second > 59) throw new FormatException($"无效秒 {second}");
+        var value = FaultRecordTimeDecoder.Decode(
+            samples[0].Value,
+            samples[1].Value,
+            samples[2].Value);
 
         return (
-            $"{year:0000}-{month:00}-{day:00} {hour:00}:{minute:00}:{second:00}",
+            FaultRecordTimeDecoder.Format(value),
             "768～770/780～782 按 BCD 组合时间",
             ParseStatus.Success,
             null);
@@ -518,12 +742,47 @@ public sealed class RegisterParser
         return $"{typeName} / 第 {index} 条记录";
     }
 
+    /// <summary>
+    /// 取出 <paramref name="multiplier"/> 内部记录的小数位数（decimal scale）。
+    /// </summary>
+    /// <remarks>
+    /// CLR 的 <see cref="decimal"/> 把数值存成 96 位整数再乘以 10<sup>-scale</sup>。
+    /// <see cref="decimal.GetBits"/> 返回 4 个 int：
+    /// <list type="bullet">
+    /// <item><description>bits[0..2]：96 位整数部分（低/中/高 32 位）</description></item>
+    /// <item><description>bits[3] 的 bit16–23：scale，即小数点后的位数，范围 0–28</description></item>
+    /// <item><description>bits[3] 的 bit31：符号位</description></item>
+    /// </list>
+    /// 因此 <c>(bits[3] >> 16) &amp; 0x7F</c> 就是 scale。
+    /// 例如 0.1 的 scale 为 1，0.01 为 2，10 为 0。
+    /// <para>
+    /// 调用方 <c>Scale</c> 用这个位数生成 <c>F{n}</c> 格式，让显示精度与协议倍率一致，
+    /// 而不是依赖 <see cref="decimal.ToString()"/> 的默认舍入或尾随零规则。
+    /// </para>
+    /// </remarks>
     private static int DecimalDigits(decimal multiplier)
     {
         var bits = decimal.GetBits(multiplier);
         return (bits[3] >> 16) & 0x7F;
     }
 
+    /// <summary>
+    /// 若 <paramref name="value"/> 的第 <paramref name="bit"/> 位为 1，则把对应含义加入结果列表。
+    /// </summary>
+    /// <remarks>
+    /// 寄存器按位编码状态：每一位独立表示一个开关量（0 = 无 / 1 = 有）。
+    /// 例如运行状态字 bit2 = 有报警，bit3 = 故障跳闸。
+    /// <para>
+    /// <c>1 &lt;&lt; bit</c> 把字面量 1 左移 <paramref name="bit"/> 位，得到只在该位为 1 的掩码：
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>bit = 0 → 0b0000_0001（1）</description></item>
+    /// <item><description>bit = 2 → 0b0000_0100（4）</description></item>
+    /// <item><description>bit = 10 → 0b0000_0100_0000_0000（1024）</description></item>
+    /// </list>
+    /// <c>value &amp; mask</c> 只保留这一位：结果非 0 说明该标志置位。
+    /// 不能写成 <c>value &amp; bit</c>，那是把 bit 当数值去与，而不是检测第 N 位。
+    /// </remarks>
     private static void AddFlag(List<string> target, ushort value, int bit, string text)
     {
         if ((value & (1 << bit)) != 0)

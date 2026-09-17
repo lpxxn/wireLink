@@ -1,6 +1,6 @@
 # WireLink
 
-WireLink 是面向 USB 转 RS485 设备的跨平台 Modbus RTU 读取、解析、展示和 Excel 导出工具。当前支持设备数据、历史故障记录，以及固定录波区的三相曲线与 Excel 导出。
+WireLink 是面向 USB 转 RS485 设备的跨平台 Modbus RTU 读取、解析、展示和 Excel 导出工具。当前支持框架控制器和塑壳断路器；框架控制器提供设备、保护、历史故障和录波数据，塑壳断路器提供设备与保护数据。
 
 ## 快速开始
 
@@ -13,7 +13,19 @@ dotnet test tests/WireLink.Tests/WireLink.Tests.csproj
 dotnet run --project src/WireLink.App/WireLink.App.csproj
 ```
 
-操作顺序：选择或输入串口 → 选择波特率 → 打开串口 → 输入设备地址并选择 BW1/BW3 控制器 → 连接测试 → 读取设备/故障/录波数据。程序恢复上次设置，但不会自动打开串口。
+```
+dotnet build .\src\WireLink.App -t:Rebuild
+dotnet build .\src\WireLink.App\WireLink.App.csproj --target Rebuild
+
+```
+
+实际上，如果你的目的只是干净地重新编译整个项目，我更建议：
+```
+dotnet clean .\src\WireLink.App\WireLink.App.csproj
+dotnet build .\src\WireLink.App\WireLink.App.csproj
+```
+
+操作顺序：选择设备类型、串口和波特率 → 打开串口 → 输入设备地址 → 连接测试 → 读取该设备支持的数据。切换设备类型会保留已打开的串口，但会停止刷新、清空旧数据并要求重新连接测试。程序恢复上次设置，但不会自动打开串口。
 
 macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed by system policy`，请按 [发布与签名](docs/release.md) 的调试签名段处理。
 
@@ -21,16 +33,20 @@ macOS 26 若调试运行提示 `libSkiaSharp.dylib ... library load disallowed b
 
 - 已实现：端口动态枚举和手动输入、8N1 串口、03H、06H、CRC、超时/CRC 重试一次、异常响应、请求串行化、分区读取和部分失败保留。
 - 已实现：设备与故障四列双组表、自动刷新、连续失败停止、浅/深/系统主题、固定 uint32 高字优先解析、Excel 导出。
+- 已实现：框架控制器保护数据（1280、1282～1288、1296～1301，依赖 1552/1793）、塑壳断路器设备/保护数据、设备类型切换、设备专属连接探测地址，以及 2400/4800 BPS。
 - 已实现：F12 非模态日志窗、Debug 原始帧与逐字段公式、滚动文件日志、JSON 设置。
 - 已实现：独立虚拟串口模拟器及超时、CRC、异常码注入。
-- 已实现：18 块固定录波读取、三相显隐曲线、AD-RMS、Shift+F8 原始点明细及 uint16 原始值曲线、PDF 全部 18 个原始响应帧模拟与回归测试，以及分析/地址明细 Excel。
-- 暂不实现：录波 AD→A 标定、多条录波选择、设备参数编辑、遥控、安装器与生产代码签名。
+- 已实现：录波页固定选择故障第 0 条记录（最近一条）并读取 768～770 的有效 BCD 时间，不跟随故障数据页的类型和序号选择；随后读取 1552 框架等级和 18 块固定录波。秒级故障时间会绑定一个持久化的软件补充毫秒，主图和主 Excel 使用绝对时间轴并明确其来源。录波按厂商公式换算三相安培曲线和 A-RMS；Shift+F8 仍提供相对时间、有符号 AD、uint16 原值、源地址和原始值曲线；PDF 全部 18 个响应帧用于模拟与回归测试。
+- 暂不实现：多条录波选择、设备参数编辑、遥控、安装器与生产代码签名。
 
 ## 文档索引
 
 - [开发计划](docs/development-plan.md)
 - [架构与维护](docs/architecture.md)
 - [协议解析与未确认规则](docs/protocol.md)
+- [框架控制器保护数据](docs/frame-controller-protection.md)
+- [decimal scale：如何取出倍率的小数位数](docs/decimal-scale-explained.md)
+- [塑壳断路器协议实现](docs/molded-case-circuit-breaker.md)
 - [故障录波协议解析](docs/waveform-protocol.md)
 - [录波 RMS 公式与解析代码说明](docs/waveform-rms-explained.md)
 - [录波功能实现计划](docs/waveform-implementation-plan.md)

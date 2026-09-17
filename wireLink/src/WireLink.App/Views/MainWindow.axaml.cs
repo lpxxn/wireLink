@@ -56,7 +56,14 @@ public partial class MainWindow : Window
     }
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F8 && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && DataTabs.SelectedItem == WaveformTab)
+        if (e.Key == Key.F1)
+        {
+            ShowAboutWindow();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F8 && e.KeyModifiers.HasFlag(KeyModifiers.Shift)
+            && DataContext is MainViewModel { IsFrameController: true }
+            && DataTabs.SelectedItem == WaveformTab)
         {
             ShowWaveformPointDetailsWindow();
             e.Handled = true;
@@ -98,6 +105,12 @@ public partial class MainWindow : Window
         Position = new PixelPoint(
             screen.WorkingArea.X + Math.Max(0, (screen.WorkingArea.Width - physicalWidth) / 2),
             screen.WorkingArea.Y + Math.Max(0, (screen.WorkingArea.Height - physicalHeight) / 2));
+    }
+
+    private async void ShowAboutWindow()
+    {
+        var dialog = new AboutWindow();
+        await dialog.ShowDialog(this);
     }
 
     private void ShowLogWindow()

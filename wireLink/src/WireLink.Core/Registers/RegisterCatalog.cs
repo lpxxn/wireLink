@@ -14,6 +14,12 @@ public static class RegisterCatalog
     /// <summary>1552 中额定电流序值所占的低 8 位。</summary>
     public const ushort RatedCurrentOrdinalMask = 0x00FF;
 
+    /// <summary>框架控制器参数寄存器；bit12～bit10 表示接地保护方式。</summary>
+    public const ushort GroundProtectionModeRegisterAddress = 1793;
+
+    /// <summary>1793 中接地保护方式所占的 bit12～bit10。</summary>
+    public const ushort GroundProtectionModeMask = 0x1C00;
+
     public static IReadOnlyList<RegisterBlock> DeviceBlocks { get; } =
     [
         // 每个无业务依赖的字段独立读取，避免一个地址失败连带清空其他字段。
@@ -35,15 +41,6 @@ public static class RegisterCatalog
         new(512, 1),
         // 当前报警在协议中的逻辑顺序为 [514,513]，通信时读取连续地址 513～514。
         new(513, 2),
-        new(515, 1),
-        new(516, 1),
-        new(517, 1),
-        new(518, 1),
-        new(519, 1),
-        new(520, 1),
-        new(521, 1),
-        new(522, 1),
-        new(523, 1),
         // 1552.bit0～bit7 是额定电流序值；它只用于计算设备页电流，不在设备页单独显示。
         new(RatedCurrentRegisterAddress, 1),
     ];
@@ -68,15 +65,6 @@ public static class RegisterCatalog
         new("运行状态", [512], RegisterDataType.UInt16, string.Empty, ValueTransform.RunStatus, FormatDescription: "见 5.2"),
         // 协议表按 514、513 的顺序定义当前报警；前者为高 16 位，后者为低 16 位，不能按地址重新排序。
         new("当前报警", [514, 513], RegisterDataType.UInt32, string.Empty, ValueTransform.AlarmBits, FormatDescription: "见 5.3"),
-        new("当前故障/报警相别和类型", [515], RegisterDataType.UInt16, string.Empty, ValueTransform.CurrentEvent, FormatDescription: "见 5.4", ShowInTable: false),
-        new("当前故障数据 0", [516], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData0, FormatDescription: "见 5.5；按事件类型解析", ShowInTable: false),
-        EventAdditional("当前故障数据 1", 517, showInTable: false),
-        EventAdditional("当前故障数据 2", 518, showInTable: false),
-        EventData3("当前故障数据 3", 519, showInTable: false),
-        EventAdditional("当前故障数据 4", 520, showInTable: false),
-        EventAdditional("当前故障数据 5", 521, showInTable: false),
-        EventAdditional("当前故障数据 6", 522, showInTable: false),
-        EventAdditional("当前故障数据 7", 523, showInTable: false),
     ];
 
     public static IReadOnlyList<RegisterDefinition> FaultDefinitions { get; } =
@@ -97,9 +85,6 @@ public static class RegisterCatalog
         new("软件版本号", [783], RegisterDataType.UInt16, string.Empty, ValueTransform.Multiply, FormatDescription: "协议标注未使用"),
         new("故障记录状态标志", [784], RegisterDataType.UInt16, string.Empty, ValueTransform.FaultRecordStatus, FormatDescription: "见 5.6"),
         new("指定读取的记录", [785], RegisterDataType.UInt16, string.Empty, ValueTransform.RecordSelector, FormatDescription: "L记录类型/H第几条记录"),
-        // 仍读取并解析 1552，供电流事件换算；故障数据表格不单独展示该字段。
-        new("额定电流", [RatedCurrentRegisterAddress], RegisterDataType.UInt16, "A", ValueTransform.RatedCurrent,
-            FormatDescription: "1552.bit0～bit7 按控制器系列映射", ShowInTable: false),
         Number("总操作次数", 1031, string.Empty),
     ];
 
@@ -109,13 +94,13 @@ public static class RegisterCatalog
     private static RegisterDefinition Current(string name, ushort address) =>
         new(name, [address], RegisterDataType.UInt16, "A", ValueTransform.CurrentRatio, FormatDescription: "×电流变比");
 
-    private static RegisterDefinition EventAdditional(string name, ushort address, bool showInTable = true) =>
+    private static RegisterDefinition EventAdditional(string name, ushort address) =>
         new(name, [address], RegisterDataType.UInt16, string.Empty, ValueTransform.EventAdditionalData,
-            FormatDescription: "故障/变位显示原始值；报警时为空", ShowInTable: showInTable);
+            FormatDescription: "故障/变位显示原始值；报警时为空");
 
-    private static RegisterDefinition EventData3(string name, ushort address, bool showInTable = true) =>
+    private static RegisterDefinition EventData3(string name, ushort address) =>
         new(name, [address], RegisterDataType.UInt16, string.Empty, ValueTransform.EventData3Raw,
-            FormatDescription: "故障直接显示原始值；报警时为空", ShowInTable: showInTable);
+            FormatDescription: "故障直接显示原始值；报警时为空");
 
     private static RegisterDefinition UInt32(
         string name,

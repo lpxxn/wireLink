@@ -19,6 +19,15 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
     public byte SlaveAddress { get; } = slaveAddress;
     public SimulatorFaultMode FaultMode { get; set; }
     public SimulatorCurrentEventMode CurrentEventMode { get; private set; } = SimulatorCurrentEventMode.Normal;
+    public byte GroundProtectionMode
+    {
+        get
+        {
+            lock (_sync)
+                return (byte)((_registers[RegisterCatalog.GroundProtectionModeRegisterAddress]
+                    & RegisterCatalog.GroundProtectionModeMask) >> 10);
+        }
+    }
     public byte ExceptionCode { get; set; } = 0x02;
     public IReadOnlyDictionary<ushort, ushort> Registers => _registers;
     public int RegisterCount { get { lock (_sync) return _registers.Count; } }
@@ -29,6 +38,23 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         {
             CurrentEventMode = mode;
             LoadCurrentEvent();
+        }
+    }
+
+    /// <summary>
+    /// 修改 1793.bit12～bit10：0=关闭，1=漏电型，2=差值型，3=地电流型。
+    /// 1793 的其他位保持不变。
+    /// </summary>
+    public void SetGroundProtectionMode(byte mode)
+    {
+        if (mode > 3)
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "接地保护方式只允许 0～3。");
+
+        lock (_sync)
+        {
+            var address = RegisterCatalog.GroundProtectionModeRegisterAddress;
+            var original = _registers[address];
+            _registers[address] = (ushort)((original & ~RegisterCatalog.GroundProtectionModeMask) | (mode << 10));
         }
     }
 
@@ -120,14 +146,33 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
     private static Dictionary<ushort, ushort> CreateRegisters()
     {
         var map = new Dictionary<ushort, ushort>();
-        foreach (var (start, count) in new[] { (256,3),(268,3),(336,8),(352,6),(512,12),(768,18) })
+        foreach (var (start, count) in new[]
+                 {
+                     (1, 7), (0x16, 8), (0x1E, 2), (0x32, 4),
+                     (256, 3), (268, 3), (336, 8), (352, 6), (512, 12), (768, 18),
+                     (1280, 1), (1282, 7), (1296, 6),
+                 })
             for (var i = 0; i < count; i++) map[(ushort)(start + i)] = 0;
-        map[256]=230; map[257]=231; map[258]=229; map[268]=21; map[269]=20; map[270]=22;
-        map[279]=68;
-        SetUInt32(map,336,12345); SetUInt32(map,338,12410); SetUInt32(map,340,12280); SetUInt32(map,342,980);
-        SetUInt32(map,352,2301); SetUInt32(map,354,2310); SetUInt32(map,356,2294);
+        // 塑壳断路器示例。
+        map[0x0001] = 120; map[0x0002] = 118; map[0x0003] = 121; map[0x0004] = 0;
+        map[0x0005] = 5; map[0x0006] = 121; map[0x0007] = 2;
+        map[0x0016] = 100; map[0x0017] = 30; map[0x0018] = 500; map[0x0019] = 10;
+        map[0x001A] = 800; map[0x001B] = 50; map[0x001C] = 4; map[0x001D] = 35;
+        map[0x001E] = 5; map[0x001F] = 80;
+        map[0x0032] = 8; map[0x0033] = 560; map[0x0034] = 1; map[0x0035] = 125;
+        map[256] = 230; map[257] = 231; map[258] = 229; map[268] = 21; map[269] = 20; map[270] = 22;
+        map[279] = 68;
+        SetUInt32(map, 336, 12345); SetUInt32(map, 338, 12410); SetUInt32(map, 340, 12280); SetUInt32(map, 342, 980);
+        SetUInt32(map, 352, 2301); SetUInt32(map, 354, 2310); SetUInt32(map, 356, 2294);
         // 1552.bit0～bit7=4，对应 BW1/BW3 的 630A；bit8～bit11=3 模拟非零框架等级。
-        map[512]=0x0002; map[784]=0x0444; map[1552]=0x0304; map[1031]=128;
+        map[512] = 0x0002; map[784] = 0x0444; map[1552] = 0x0204; map[1031] = 128;
+        // 框架控制器保护数据；1793.bit12～bit10=3，按地电流型解析。
+        map[1793] = 0x0C00;
+        map[1280] = 630;
+        map[1282] = 945; map[1283] = 20; map[1284] = 1260; map[1285] = 6300;
+        map[1286] = 1; map[1287] = 315; map[1288] = 8;
+        map[1296] = 250; map[1297] = 200; map[1298] = 0x141E; map[1299] = 0x141E;
+        map[1300] = 100; map[1301] = 1000;
         LoadWaveformRegisters(map);
         return map;
     }
@@ -177,23 +222,23 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         }
     }
 
-    private static Dictionary<(byte,byte),ushort[]> CreateRecords()
+    private static Dictionary<(byte, byte), ushort[]> CreateRecords()
     {
-        var result = new Dictionary<(byte,byte),ushort[]>();
+        var result = new Dictionary<(byte, byte), ushort[]>();
         for (byte type = 0; type <= 2; type++)
-        for (byte index = 0; index < 16; index++)
-        {
-            var record = new ushort[18];
-            var secondBcd=(ushort)(((index/10)<<4)|(index%10));
-            record[0]=0x2607; record[1]=0x2214; record[2]=(ushort)(0x3000 | secondBcd); record[3]=(ushort)(((type == 1 ? 3 : 7) << 8) | index % 4);
-            for (var i=4;i<=11;i++) record[i]=(ushort)(1000 + index * 10 + i);
-            record[12]=0x2607; record[13]=0x2208; record[14]=0x1500; record[15]=0x0100; record[16]=0x0444;
-            record[17]=(ushort)((index<<8)|type);
-            result[(type,index)] = record;
-        }
+            for (byte index = 0; index < 16; index++)
+            {
+                var record = new ushort[18];
+                var secondBcd = (ushort)(((index / 10) << 4) | (index % 10));
+                record[0] = 0x2607; record[1] = 0x2214; record[2] = (ushort)(0x3000 | secondBcd); record[3] = (ushort)(((type == 1 ? 3 : 7) << 8) | index % 4);
+                for (var i = 4; i <= 11; i++) record[i] = (ushort)(1000 + index * 10 + i);
+                record[12] = 0x2607; record[13] = 0x2208; record[14] = 0x1500; record[15] = 0x0100; record[16] = 0x0444;
+                record[17] = (ushort)((index << 8) | type);
+                result[(type, index)] = record;
+            }
         return result;
     }
 
-    private static void SetUInt32(Dictionary<ushort,ushort> map, ushort address, uint value)
-    { map[address]=(ushort)(value>>16); map[(ushort)(address+1)]=(ushort)value; }
+    private static void SetUInt32(Dictionary<ushort, ushort> map, ushort address, uint value)
+    { map[address] = (ushort)(value >> 16); map[(ushort)(address + 1)] = (ushort)value; }
 }
