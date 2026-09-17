@@ -99,6 +99,22 @@ public sealed class ServiceTests
     }
 
     [Fact]
+    public async Task Waveform_time_source_fault_record_zero_writes_selector_0000()
+    {
+        await using var client = new FakeClient((start, count) =>
+        {
+            Assert.Equal((ushort)768, start);
+            Assert.Equal((ushort)3, count);
+            return [0x2607, 0x2214, 0x3009];
+        });
+
+        await new FaultRecordService(client, new RegisterParser()).ReadTimestampAsync(
+            4, FaultRecordType.Fault, 0, TimeSpan.Zero);
+
+        Assert.Equal(((ushort)785, (ushort)0x0000), client.LastWrite);
+    }
+
+    [Fact]
     public async Task Empty_fault_timestamp_is_rejected_before_waveform_can_start()
     {
         await using var client = new FakeClient((_, _) => [0, 0, 0]);

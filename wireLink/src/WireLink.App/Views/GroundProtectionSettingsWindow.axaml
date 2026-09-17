@@ -1,0 +1,91 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WireLink.App.ViewModels"
+        x:Class="WireLink.App.Views.GroundProtectionSettingsWindow"
+        x:DataType="vm:GroundProtectionSettingsViewModel"
+        Width="640"
+        Height="520"
+        MinWidth="560"
+        MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/wirelink-icon.png"
+        Title="接地保护方式">
+  <Window.Styles>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}"/>
+      <Setter Property="BorderBrush" Value="#E1E6EF"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Padding" Value="18"/>
+    </Style>
+    <Style Selector="Button.action">
+      <Setter Property="Height" Value="42"/>
+      <Setter Property="Padding" Value="24,0"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="16">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel Spacing="4">
+        <TextBlock Text="接地保护方式" FontSize="22" FontWeight="SemiBold"/>
+        <TextBlock Text="寄存器 1793（0x0701）· bit12～bit10 · 快捷键 Shift+F6"
+                   Opacity=".58"/>
+      </StackPanel>
+      <Border Grid.Column="1" Background="#EEF3FF" CornerRadius="8" Padding="12,7"
+              VerticalAlignment="Center">
+        <TextBlock Text="{Binding ConnectionText}" Foreground="#3159D5"/>
+      </Border>
+    </Grid>
+
+    <Border Grid.Row="1" Classes="card">
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="20">
+        <StackPanel Spacing="7">
+          <TextBlock Text="1793 当前原值" Opacity=".58"/>
+          <TextBlock Text="{Binding RawValueText}" FontFamily="Consolas,monospace"
+                     FontSize="20" FontWeight="SemiBold"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Spacing="7">
+          <TextBlock Text="当前接地保护方式" Opacity=".58"/>
+          <TextBlock Text="{Binding CurrentModeText}" FontSize="20" FontWeight="SemiBold"/>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="2" Classes="card">
+      <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="12">
+        <TextBlock Text="修改接地保护方式" FontSize="16" FontWeight="SemiBold"/>
+        <ComboBox Grid.Row="1"
+                  ItemsSource="{Binding Modes}"
+                  SelectedItem="{Binding SelectedMode}"
+                  IsEnabled="{Binding CanSelectMode}"
+                  Height="44">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:GroundProtectionModeOption">
+              <TextBlock Text="{Binding DisplayText}"/>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Border Grid.Row="2" Background="#F6F8FC" CornerRadius="8" Padding="12">
+          <TextBlock Text="{Binding SelectedModeDescription}" TextWrapping="Wrap"/>
+        </Border>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+      <Border Background="#EEF3FF" CornerRadius="8" Padding="12" Margin="0,0,6,0">
+        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+      </Border>
+      <Button Grid.Column="1" Classes="action"
+              Content="重新读取"
+              Command="{Binding ReadCommand}"
+              IsEnabled="{Binding CanRead}"/>
+      <Button Grid.Column="2" Classes="action"
+              Background="#3D67E8" Foreground="White"
+              Content="写入并校验"
+              Command="{Binding WriteCommand}"
+              IsEnabled="{Binding CanWrite}"/>
+    </Grid>
+  </Grid>
+</Window>

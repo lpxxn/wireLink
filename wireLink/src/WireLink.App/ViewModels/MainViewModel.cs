@@ -289,7 +289,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanAutoRefresh => CanRead && RefreshSeconds is not null;
     public bool CanReadProtection => CanRead && HasProtectionData;
     public bool CanReadFault => CanRead && IsFrameController && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
-    public bool CanReadWaveform => CanRead && IsFrameController && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
+    // 录波时间固定取“故障第 0 条（最近一条）”，不依赖故障数据页当前选择的类型和序号。
+    public bool CanReadWaveform => CanRead && IsFrameController && FaultDelayMilliseconds is not null;
     public bool CanExportDevice => _deviceReadAt != default && IsDeviceConnected && !IsBusy;
     public bool CanExportProtection => _protectionReadAt != default && IsDeviceConnected && !IsBusy && HasProtectionData;
     public bool CanExportFault => _faultReadAt != default && IsDeviceConnected && !IsBusy && IsFrameController;
@@ -477,22 +478,22 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private async Task ReadWaveformAsync()
     {
         if (!CanReadWaveform || DeviceAddress is not int address ||
-            FaultRecordIndex is not int faultRecordIndex || FaultDelayMilliseconds is not int faultDelayMilliseconds)
+            FaultDelayMilliseconds is not int faultDelayMilliseconds)
             return;
         await RunBusyAsync(async token =>
         {
-            var selectedType = SelectedFaultRecordType.Value;
-            var selectedIndex = (byte)faultRecordIndex;
+            const FaultRecordType waveformTimeRecordType = FaultRecordType.Fault;
+            const byte waveformTimeRecordIndex = 0;
             WaveformProgressText =
-                $"正在读取故障记录时间：{DescribeFaultRecordType(selectedType)}，第 {selectedIndex} 条记录";
+                "正在读取故障记录时间：故障，第 0 条记录（最近一条）";
 
             DateTime faultRecordTime;
             try
             {
                 faultRecordTime = await _faultService.ReadTimestampAsync(
                     (byte)address,
-                    selectedType,
-                    selectedIndex,
+                    waveformTimeRecordType,
+                    waveformTimeRecordIndex,
                     TimeSpan.FromMilliseconds(faultDelayMilliseconds),
                     token);
             }
@@ -512,8 +513,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             var timing = new WaveformTiming(
                 faultRecordTime,
                 softwareMilliseconds,
-                selectedType,
-                selectedIndex);
+                waveformTimeRecordType,
+                waveformTimeRecordIndex);
 
             WaveformProgressText = "正在读取框架等级：1552 (0610H)";
             var progressStateLock = new object();

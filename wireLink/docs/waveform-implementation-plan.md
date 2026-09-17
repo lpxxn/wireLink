@@ -8,7 +8,7 @@
 
 - 新增 `WaveformPhase`、`WaveformBlockDefinition`、`WaveformPoint`、`WaveformCalibration`、`WaveformData` 和 `WaveformReadProgress`。
 - `WaveformCatalog` 固化 18 个块、每块 64 点、每相 384 点、3200 Hz 和 0.3125 ms 采样间隔。
-- `IFaultRecordService.ReadTimestampAsync` 先写 785 选择记录、等待准备时间、读取 768～770，并用公共 BCD 时间解析器返回强类型 `DateTime`。
+- `IFaultRecordService.ReadTimestampAsync` 固定向 785 写入 `0000H`，选择故障第 0 条记录（最近一条）、等待准备时间、读取 768～770，并用公共 BCD 时间解析器返回强类型 `DateTime`；录波页不跟随故障数据页的类型和序号选择。
 - `IWaveformTimeOffsetStore` 以秒级故障时间为唯一键，生成并持久化 `0～999 ms`；`WaveformTiming` 负责把相对毫秒转换成绝对时间。
 - `IWaveformDataService.ReadAsync` 在前置时间流程成功后读取 1552，再按段、A/B/C 顺序调用现有 `IModbusRtuClient`。
 - `ushort` 使用 `unchecked((short)value)` 转成有符号 AD；不交换寄存器内字节。
@@ -53,7 +53,7 @@
 ## 7. 验收
 
 1. 全部 18 个 PDF 帧的长度、CRC、拼接 SHA-256、块顺序和模拟器逐点一致性测试通过。
-2. 请求顺序固定为“写 785 选择记录 → 读 768～770 → 持久化稳定毫秒 → 读 1552/数量1 → 18 个数量64的录波请求”；进度分母仍为18。
+2. 请求顺序固定为“向 785 写 `0000H` 选择故障第 0 条记录 → 读 768～770 → 持久化稳定毫秒 → 读 1552/数量1 → 18 个数量64的录波请求”；进度分母仍为18。
 3. 无效故障时间时弹窗和状态栏给出原因，且 1552 与 18 个录波地址均不得被请求；上一次完整曲线保持不变。
 4. 页面、Excel 和模拟器对同一点给出一致的相对时间、绝对时间、有符号 AD 与安培值，并验证跨秒、跨分钟。
 5. 深浅主题、窗口缩放、三相显隐、绝对时间标签、工具提示和失败保留完成手工检查。

@@ -74,7 +74,7 @@ public sealed class MainViewModelTests
         viewModel.FaultRecordIndex=null;
         Assert.Null(viewModel.FaultRecordIndex);
         Assert.False(viewModel.CanReadFault);
-        Assert.False(viewModel.CanReadWaveform);
+        Assert.True(viewModel.CanReadWaveform);
         Assert.True(viewModel.CanRead);
 
         viewModel.FaultRecordIndex=0;
@@ -171,19 +171,27 @@ public sealed class MainViewModelTests
     public async Task Waveform_read_runs_timestamp_offset_and_waveform_steps_in_that_order()
     {
         var calls=new List<string>();
+        var faultService=new FakeFaultRecordService(()=>calls.Add("故障时间"));
         await using var viewModel=CreateViewModel(
             ["COM10"],
             new AppSettings(PortName:"COM10"),
             deviceService:new ConnectedDeviceDataService(),
-            faultService:new FakeFaultRecordService(()=>calls.Add("故障时间")),
+            faultService:faultService,
             waveformTimeOffsetStore:new FakeWaveformTimeOffsetStore(123,()=>calls.Add("稳定毫秒")),
             waveformService:new CompletedWaveformDataService(()=>calls.Add("1552和18块")));
 
         await viewModel.ToggleSerialCommand.Execute().ToTask();
         await viewModel.TestConnectionCommand.Execute().ToTask();
+        viewModel.SelectedFaultRecordType=viewModel.FaultRecordTypes.Single(
+            option=>option.Value==FaultRecordType.StateChange);
+        viewModel.FaultRecordIndex=15;
         await viewModel.ReadWaveformCommand.Execute().ToTask();
 
         Assert.Equal(["故障时间","稳定毫秒","1552和18块"],calls);
+        Assert.Equal(FaultRecordType.Fault,faultService.LastTimestampRecordType);
+        Assert.Equal((byte)0,faultService.LastTimestampRecordIndex);
+        Assert.Equal(FaultRecordType.Fault,viewModel.CurrentWaveformData?.Timing?.RecordType);
+        Assert.Equal((byte)0,viewModel.CurrentWaveformData?.Timing?.RecordIndex);
     }
 
     [Fact]
@@ -537,6 +545,9 @@ public sealed class MainViewModelTests
 
     private sealed class FakeFaultRecordService(Action? timestampRead=null) : IFaultRecordService
     {
+        public FaultRecordType? LastTimestampRecordType { get; private set; }
+        public byte? LastTimestampRecordIndex { get; private set; }
+
         public Task<DataReadResult> ReadAsync(byte slaveAddress,FaultRecordType type,byte recordIndex,
             WordOrder wordOrder,BreakerSeries controllerSeries,TimeSpan readyDelay,
             CancellationToken cancellationToken=default)=>
@@ -545,6 +556,8 @@ public sealed class MainViewModelTests
         public Task<DateTime> ReadTimestampAsync(byte slaveAddress,FaultRecordType type,byte recordIndex,
             TimeSpan readyDelay,CancellationToken cancellationToken=default)
         {
+            LastTimestampRecordType=type;
+            LastTimestampRecordIndex=recordIndex;
             timestampRead?.Invoke();
             return Task.FromResult(new DateTime(2026,7,22,14,30,1,DateTimeKind.Unspecified));
         }

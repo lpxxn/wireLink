@@ -67,7 +67,7 @@ public static class DeviceProfileCatalog
                     FormatDescription: "1793.bit12～bit10；仅漏电型和地电流型参与后续换算"),
                 Current("过载动作值", 1280),
                 Current("短路定时限电流设定值", 1282),
-                Number("短路定时限时间设定值", 1283, "s", 0.01m),
+                Number("短路定时限时间设定值", 1283, "s", 0.02m),
                 Current("短路反时限电流设定值", 1284),
                 Current("瞬时电流设定值", 1285),
                 new("N 相保护设置", [1286], RegisterDataType.UInt16, string.Empty,
