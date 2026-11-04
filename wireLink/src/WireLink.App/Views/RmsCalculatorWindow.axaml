@@ -1,0 +1,77 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WireLink.App.ViewModels"
+        x:Class="WireLink.App.Views.RmsCalculatorWindow"
+        x:DataType="vm:RmsCalculatorViewModel"
+        Width="900" Height="780" MinWidth="760" MinHeight="620"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/wirelink-icon.png"
+        Title="RMS 计算器">
+  <Grid Margin="24" RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="14">
+    <StackPanel Spacing="4">
+      <TextBlock Text="RMS 计算器" FontSize="22" FontWeight="SemiBold"/>
+      <TextBlock Text="F9 打开 · 输入一块有符号 AD 数据和 Rate，核对均方根与安培有效值。"
+                 Opacity=".65" TextWrapping="Wrap"/>
+    </StackPanel>
+
+    <Border Grid.Row="1" Background="#156688CC" BorderBrush="#608096B8" BorderThickness="1"
+            CornerRadius="10" Padding="16,12">
+      <StackPanel Spacing="7">
+        <TextBlock Text="计算公式" FontWeight="SemiBold"/>
+        <TextBlock Text="AD-RMS = √[(AD₁² + AD₂² + … + ADₙ²) / N]" FontSize="15"
+                   FontFamily="Consolas,monospace" TextWrapping="Wrap"/>
+        <TextBlock Text="RMS(A) = AD-RMS × (10000 / 22953) × Rate" FontSize="15"
+                   FontFamily="Consolas,monospace" TextWrapping="Wrap"/>
+        <TextBlock Text="N 为实际输入点数；标准录波块为64点。使用原始AD计算，安培结果最后保留1位小数。"
+                   FontSize="12" Opacity=".65" TextWrapping="Wrap"/>
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="2" ColumnDefinitions="*,260" ColumnSpacing="18">
+      <Grid RowDefinitions="Auto,*" RowSpacing="8">
+        <StackPanel Spacing="3">
+          <TextBlock Text="有符号 AD 采样值" FontWeight="SemiBold"/>
+          <TextBlock Text="每行一个值，也支持空格、逗号或分号分隔。" FontSize="12" Opacity=".65"/>
+        </StackPanel>
+        <TextBox Grid.Row="1" Text="{Binding SamplesText, Mode=TwoWay}"
+                 AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas,monospace"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 PlaceholderText="在此粘贴采样值，例如：433、354、273…"/>
+      </Grid>
+      <StackPanel Grid.Column="1" Spacing="12">
+        <TextBlock Text="Rate" FontWeight="SemiBold"/>
+        <TextBox Text="{Binding RateText, Mode=TwoWay}" PlaceholderText="例如 1、1.5、2"/>
+        <TextBlock Text="框I：1　框II：1.5　框III：2" FontSize="12" Opacity=".65"/>
+        <Border Background="#156688CC" BorderBrush="#608096B8" BorderThickness="1"
+                CornerRadius="10" Padding="16">
+          <StackPanel Spacing="10">
+            <TextBlock Text="{Binding CountText}" Opacity=".7"/>
+            <TextBlock Text="AD-RMS（原始值均方根）" FontSize="12" Opacity=".65"/>
+            <TextBlock Text="{Binding AdRmsText}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBlock Text="RMS（安培有效值）" FontSize="12" Opacity=".65" Margin="0,6,0,0"/>
+            <TextBlock Text="{Binding AmperesRmsText}" FontSize="30" FontWeight="SemiBold" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </Grid>
+
+    <Border Grid.Row="3" IsVisible="{Binding HasResult}" Background="#156688CC"
+            BorderBrush="#608096B8" BorderThickness="1" CornerRadius="10" Padding="14,10">
+      <StackPanel Spacing="5">
+        <TextBlock Text="代入计算" FontWeight="SemiBold"/>
+        <TextBlock Text="{Binding CalculationSteps}" TextWrapping="Wrap" FontSize="12"/>
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="4" RowDefinitions="Auto,Auto" RowSpacing="8">
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="#D75050" TextWrapping="Wrap"/>
+      <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="10">
+        <Button Content="填入示例" Command="{Binding LoadExampleCommand}" Padding="18,8"/>
+        <Button Grid.Column="1" Content="清空数据" Command="{Binding ClearCommand}" Padding="18,8"/>
+        <Button Grid.Column="3" Content="计算 RMS" Command="{Binding CalculateCommand}"
+                Background="#3D67E8" Foreground="White" FontWeight="SemiBold" Padding="24,8"/>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

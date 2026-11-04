@@ -368,12 +368,14 @@ public sealed class ServiceTests
         Assert.Equal((ushort)0x0204, result.Calibration.RegisterValue);
         Assert.Equal((byte)2, result.Calibration.FrameLevel);
         Assert.Equal(2, result.Calibration.Rate);
-        Assert.Equal(WaveformCalibration.RoundAmperes(
-            result.PhaseARms * result.Calibration.AmperesPerAd), result.PhaseAAmperesRms);
-        Assert.Equal(WaveformCalibration.RoundAmperes(
-            result.PhaseBRms * result.Calibration.AmperesPerAd), result.PhaseBAmperesRms);
-        Assert.Equal(WaveformCalibration.RoundAmperes(
-            result.PhaseCRms * result.Calibration.AmperesPerAd), result.PhaseCAmperesRms);
+        Assert.Equal(6, result.Segments.Count);
+        Assert.Equal(6, progressEvents.Count(value => value.CompletedSegment is not null));
+        foreach (var value in progressEvents)
+        {
+            Assert.Equal(WaveformCalibration.RoundAmperes(
+                value.BlockResult.AdRms * result.Calibration.AmperesPerAd), value.BlockResult.AmperesRms);
+            Assert.Equal(value.CompletedBlocks % 3 == 0, value.CompletedSegment is not null);
+        }
         Assert.Contains(trace.InformationMessages, message =>
             message.Contains("寄存器1552=516") && message.Contains("框架等级=2") && message.Contains("Rate=2"));
     }

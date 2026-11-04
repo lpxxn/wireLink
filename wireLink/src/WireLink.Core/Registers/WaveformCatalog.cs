@@ -74,6 +74,8 @@ public static class WaveformSampleDecoder
         if (samples.Count == 0) return 0;
 
         var sumOfSquares = samples.Sum(value => (double)value * value);
-        return Math.Sqrt(sumOfSquares / samples.Count);
+        // 硬件的值已经除过N了也就是N=64，所以这里不需要再除以N了
+        // return Math.Sqrt(sumOfSquares / samples.Count);
+        return Math.Sqrt(sumOfSquares);
     }
 }

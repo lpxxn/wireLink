@@ -135,14 +135,71 @@ public sealed record WaveformCalibration
         Math.Round(amperes, 1, MidpointRounding.AwayFromZero);
 }
 
-/// <summary>一次完整的三相录波读取结果。只有标定参数和 18 个块全部成功时才创建。</summary>
+/// <summary>单相64点的独立只读快照；RMS在读取该块后立即计算。</summary>
+public sealed record WaveformBlockResult
+{
+    private WaveformBlockResult(WaveformBlockDefinition definition, short[] samples, WaveformCalibration calibration)
+    {
+        Definition = definition;
+        Samples = Array.AsReadOnly(samples);
+        AdRms = Registers.WaveformSampleDecoder.CalculateRms(samples);
+        AmperesRms = WaveformCalibration.RoundAmperes(AdRms * calibration.AmperesPerAd);
+    }
+
+    public WaveformBlockDefinition Definition { get; }
+    public IReadOnlyList<short> Samples { get; }
+    public double AdRms { get; }
+    public double AmperesRms { get; }
+
+    public static WaveformBlockResult Create(
+        WaveformBlockDefinition definition, IEnumerable<short> samples, WaveformCalibration calibration)
+    {
+        var copy = samples.ToArray();
+        if (definition.Count != Registers.WaveformCatalog.SamplesPerBlock || copy.Length != definition.Count)
+            throw new ArgumentException("录波块必须恰好包含64个采样点。", nameof(samples));
+        return new WaveformBlockResult(definition, copy, calibration);
+    }
+}
+
+/// <summary>同一时间段三相齐全后的不可变快照，供逐段预览和最终结果共用。</summary>
+public sealed record WaveformSegmentResult
+{
+    public WaveformSegmentResult(WaveformBlockResult phaseA, WaveformBlockResult phaseB, WaveformBlockResult phaseC)
+    {
+        if (phaseA.Definition.Phase != WaveformPhase.A || phaseB.Definition.Phase != WaveformPhase.B ||
+            phaseC.Definition.Phase != WaveformPhase.C ||
+            phaseA.Definition.SegmentIndex != phaseB.Definition.SegmentIndex ||
+            phaseA.Definition.SegmentIndex != phaseC.Definition.SegmentIndex)
+            throw new ArgumentException("时间段必须由同段的A/B/C三个块组成。");
+        PhaseA = phaseA;
+        PhaseB = phaseB;
+        PhaseC = phaseC;
+        Points = Array.AsReadOnly(Enumerable.Range(0, Registers.WaveformCatalog.SamplesPerBlock).Select(index =>
+        {
+            var globalIndex = SegmentIndex * Registers.WaveformCatalog.SamplesPerBlock + index;
+            return new WaveformPoint(globalIndex, SegmentIndex, index,
+                Registers.WaveformCatalog.GetTimeMilliseconds(globalIndex),
+                phaseA.Samples[index], phaseB.Samples[index], phaseC.Samples[index],
+                checked((ushort)(phaseA.Definition.StartAddress + index)),
+                checked((ushort)(phaseB.Definition.StartAddress + index)),
+                checked((ushort)(phaseC.Definition.StartAddress + index)));
+        }).ToArray());
+    }
+
+    public int SegmentIndex => PhaseA.Definition.SegmentIndex;
+    public string TimeRangeText => PhaseA.Definition.TimeRangeText;
+    public WaveformBlockResult PhaseA { get; }
+    public WaveformBlockResult PhaseB { get; }
+    public WaveformBlockResult PhaseC { get; }
+    public IReadOnlyList<WaveformPoint> Points { get; }
+}
+
+/// <summary>一次完整的三相录波读取结果。预览快照仅供页面显示，不提交为完整结果。</summary>
 public sealed record WaveformData(
     DateTimeOffset ReadAt,
     double SampleRateHz,
     IReadOnlyList<WaveformPoint> Points,
-    double PhaseARms,
-    double PhaseBRms,
-    double PhaseCRms,
+    IReadOnlyList<WaveformSegmentResult> Segments,
     WaveformCalibration Calibration)
 {
     /// <summary>主页面和主 Excel 使用的绝对时间上下文；原始协议测试可不设置。</summary>
@@ -167,21 +224,13 @@ public sealed record WaveformData(
         ? Timing?.WaveformStartTime ?? throw new InvalidOperationException("录波数据没有故障记录时间。")
         : GetAbsoluteTime(Points[^1].TimeMilliseconds);
 
-    /// <summary>A 相安培 RMS；线性倍率下等于 AD-RMS 乘每 AD 安培系数。</summary>
-    public double PhaseAAmperesRms => WaveformCalibration.RoundAmperes(
-        PhaseARms * Calibration.AmperesPerAd);
-
-    /// <summary>B 相安培 RMS。</summary>
-    public double PhaseBAmperesRms => WaveformCalibration.RoundAmperes(
-        PhaseBRms * Calibration.AmperesPerAd);
-
-    /// <summary>C 相安培 RMS。</summary>
-    public double PhaseCAmperesRms => WaveformCalibration.RoundAmperes(
-        PhaseCRms * Calibration.AmperesPerAd);
 }
 
 /// <summary>录波读取进度。CompletedBlocks 表示当前块成功后已经完成的数量。</summary>
 public sealed record WaveformReadProgress(
     int CompletedBlocks,
     int TotalBlocks,
-    WaveformBlockDefinition CurrentBlock);
+    WaveformBlockDefinition CurrentBlock,
+    WaveformBlockResult BlockResult,
+    WaveformCalibration Calibration,
+    WaveformSegmentResult? CompletedSegment);

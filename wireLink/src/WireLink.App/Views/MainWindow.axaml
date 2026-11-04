@@ -13,6 +13,28 @@
         Icon="/Assets/wirelink-icon.png"
         Title="Bevone · WireLink">
 
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+          <SolidColorBrush x:Key="WaveformPanelBackgroundBrush" Color="#FFFFFF"/>
+          <SolidColorBrush x:Key="WaveformPanelBorderBrush" Color="#DDE3ED"/>
+          <SolidColorBrush x:Key="WaveformAccentBrush" Color="#3159D5"/>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="WaveformPanelBackgroundBrush" Color="#FFFFFF"/>
+          <SolidColorBrush x:Key="WaveformPanelBorderBrush" Color="#DDE3ED"/>
+          <SolidColorBrush x:Key="WaveformAccentBrush" Color="#3159D5"/>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="WaveformPanelBackgroundBrush" Color="#242830"/>
+          <SolidColorBrush x:Key="WaveformPanelBorderBrush" Color="#505764"/>
+          <SolidColorBrush x:Key="WaveformAccentBrush" Color="#9FB8FF"/>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+
   <Window.Styles>
     <Style Selector="Border.panel">
       <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}"/>
@@ -415,33 +437,41 @@
                         Content="导出 Excel"/>
               </Grid>
 
-              <Border Grid.Row="1" Background="#EEF3FF" BorderBrush="#DCE5FA" BorderThickness="1" CornerRadius="10" Padding="14,10">
+              <Border Grid.Row="1" Background="{DynamicResource WaveformPanelBackgroundBrush}" BorderBrush="{DynamicResource WaveformPanelBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14,10">
                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="3">
                   <TextBlock Text="{Binding WaveformSummary}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                   <TextBlock Grid.Row="1" Text="{Binding WaveformProgressText}" Opacity=".62" TextWrapping="Wrap"/>
-                  <TextBlock Grid.Column="1" Grid.RowSpan="2" Text="单位：安培 A" Foreground="#3159D5" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="1" Grid.RowSpan="2" Text="曲线：AD；RMS：A" Foreground="{DynamicResource WaveformAccentBrush}" VerticalAlignment="Center"/>
                 </Grid>
               </Border>
 
-              <Border Grid.Row="2" BorderBrush="#E3E7EF" BorderThickness="1" CornerRadius="12" Background="#FAFBFD" Padding="8">
-                <Grid>
-                  <lvc:CartesianChart Series="{Binding WaveformSeries}"
-                                      XAxes="{Binding WaveformXAxes}"
-                                      YAxes="{Binding WaveformYAxes}"
-                                      LegendPosition="Top"
-                                      TooltipPosition="Top"
-                                      IsVisible="{Binding HasWaveformData}"/>
-                  <StackPanel IsVisible="{Binding HasNoWaveformData}"
-                              HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-                    <Border Classes="icon-tile" Width="52" Height="52" CornerRadius="16">
-                      <TextBlock Text="〰" FontSize="28" Foreground="#3D67E8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              <Border Grid.Row="2" BorderBrush="{DynamicResource WaveformPanelBorderBrush}" BorderThickness="1" CornerRadius="12"
+                        Background="{DynamicResource WaveformPanelBackgroundBrush}" Padding="8">
+                  <Grid>
+                    <lvc:CartesianChart x:Name="WaveformChart" SizeChanged="OnWaveformChartSizeChanged"
+                                        Series="{Binding WaveformSeries}"
+                                        XAxes="{Binding WaveformXAxes}"
+                                        YAxes="{Binding WaveformYAxes}"
+                                        Sections="{Binding WaveformSections}"
+                                        LegendPosition="Top" TooltipPosition="Hidden"
+                                        PointerMoved="OnWaveformPointerMoved"
+                                        PointerExited="OnWaveformPointerExited"
+                                        IsVisible="{Binding HasWaveformData}"/>
+                    <StackPanel IsVisible="{Binding HasNoWaveformData}"
+                                HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                      <TextBlock Text="尚无可显示的录波时间段" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                      <TextBlock Text="每段三相读取完成后立即显示；完整读取成功后可导出。"
+                                 Opacity=".56" MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Border IsVisible="{Binding HasWaveformHover}" IsHitTestVisible="False"
+                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="58,36,8,8" MaxWidth="360"
+                            Background="{DynamicResource WaveformPanelBackgroundBrush}"
+                            BorderBrush="{DynamicResource WaveformPanelBorderBrush}" BorderThickness="1"
+                            CornerRadius="8" Padding="12">
+                      <TextBlock Text="{Binding WaveformHoverText}" TextWrapping="Wrap" FontSize="12"/>
                     </Border>
-                    <TextBlock Text="尚未读取录波数据" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="固定读取故障第 0 条记录（最近一条）的时间，再读取框架等级和 18 个录波块；没有有效故障时间时不会读取录波。"
-                               Opacity=".56" MaxWidth="560" TextAlignment="Center" TextWrapping="Wrap"/>
-                  </StackPanel>
-                </Grid>
-              </Border>
+                  </Grid>
+                </Border>
             </Grid>
           </TabItem>
 

@@ -17,7 +17,7 @@ using WireLink.Core.Services;
 namespace WireLink.App.ViewModels;
 
 /// <summary>主窗口状态机：串口、设备连接、互斥读取、自动刷新和导出入口。</summary>
-public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
+public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 {
     private readonly IModbusRtuClient _client;
     private readonly ISerialPortCatalog _ports;
@@ -55,7 +55,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private byte _lastReadFaultRecordIndex;
     private WaveformData? _waveformData;
     private string _waveformProgressText = "尚未读取完整录波数据";
-    private string _waveformSummary = "采样率、点数和 RMS 将在完整读取后显示";
+    private string _waveformSummary = "每完成一个时间段，即显示三相 AD 和分块 RMS";
     private bool _showPhaseA = true;
     private bool _showPhaseB = true;
     private bool _showPhaseC = true;
@@ -134,7 +134,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     ];
     public Axis[] WaveformYAxes { get; } =
     [
-        new Axis { Name = "电流 (A)", Labeler = value => value.ToString("0.0") },
+        new Axis { Name = "采样值 (AD)", Labeler = value => value.ToString("0") },
     ];
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> RefreshPortsCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ToggleSerialCommand { get; }
@@ -296,8 +296,8 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanExportFault => _faultReadAt != default && IsDeviceConnected && !IsBusy && IsFrameController;
     public bool CanExportWaveform => _waveformData is not null && IsDeviceConnected && !IsBusy && IsFrameController;
     public WaveformData? CurrentWaveformData => _waveformData;
-    public bool HasWaveformData => _waveformData is not null;
-    public bool HasNoWaveformData => _waveformData is null;
+    public bool HasWaveformData => _displayedWaveformData?.Points.Count > 0;
+    public bool HasNoWaveformData => !HasWaveformData;
     public string WaveformProgressText
     {
         get => _waveformProgressText;
@@ -482,87 +482,81 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             return;
         await RunBusyAsync(async token =>
         {
-            const FaultRecordType waveformTimeRecordType = FaultRecordType.Fault;
-            const byte waveformTimeRecordIndex = 0;
-            WaveformProgressText =
-                "正在读取故障记录时间：故障，第 0 条记录（最近一条）";
-
-            DateTime faultRecordTime;
+            var operationId = ++_waveformReadId;
+            var progressStateLock = new object();
+            var acceptingProgress = true;
+            var previewSegments = new List<WaveformSegmentResult>();
+            var previewReadAt = DateTimeOffset.Now;
+            DisplayWaveform(null);
             try
             {
-                faultRecordTime = await _faultService.ReadTimestampAsync(
-                    (byte)address,
-                    waveformTimeRecordType,
-                    waveformTimeRecordIndex,
-                    TimeSpan.FromMilliseconds(faultDelayMilliseconds),
-                    token);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
+                const FaultRecordType waveformTimeRecordType = FaultRecordType.Fault;
+                const byte waveformTimeRecordIndex = 0;
+                WaveformProgressText = "正在读取故障记录时间：故障，第 0 条记录（最近一条）";
+                DateTime faultRecordTime;
+                try
+                {
+                    faultRecordTime = await _faultService.ReadTimestampAsync(
+                        (byte)address, waveformTimeRecordType, waveformTimeRecordIndex,
+                        TimeSpan.FromMilliseconds(faultDelayMilliseconds), token);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    var message = $"未读取到有效的故障记录时间，无法读取录波数据：{Friendly(ex)}";
+                    ErrorDialogRequested?.Invoke(this, new ErrorDialogRequest("无法读取录波数据", message));
+                    throw new InvalidOperationException(message, ex);
+                }
+
+                var softwareMilliseconds = await _waveformTimeOffsetStore.GetOrCreateAsync(faultRecordTime, token);
+                var timing = new WaveformTiming(faultRecordTime, softwareMilliseconds,
+                    waveformTimeRecordType, waveformTimeRecordIndex);
+                WaveformProgressText = "正在读取框架等级：1552 (0610H)";
+                var progress = new WaveformUiProgress(value =>
+                {
+                    lock (progressStateLock)
+                    {
+                        if (!acceptingProgress || operationId != _waveformReadId) return;
+                        var block = value.CurrentBlock;
+                        WaveformProgressText = $"已读取 {value.CompletedBlocks}/{value.TotalBlocks}：{block.Phase} 相，{block.TimeRangeText}，地址 {block.StartAddress:X4}H";
+                        if (value.CompletedSegment is { } segment && segment.SegmentIndex == previewSegments.Count)
+                        {
+                            previewSegments.Add(segment);
+                            DisplayWaveform(new WaveformData(previewReadAt, WaveformCatalog.SampleRateHz,
+                                Array.AsReadOnly(previewSegments.SelectMany(item => item.Points).ToArray()),
+                                Array.AsReadOnly(previewSegments.ToArray()), value.Calibration)
+                            { Timing = timing }, preview: true);
+                        }
+                    }
+                });
+                var data = (await _waveformService.ReadAsync((byte)address, progress, token)) with { Timing = timing };
+                token.ThrowIfCancellationRequested();
+                lock (progressStateLock)
+                {
+                    acceptingProgress = false;
+                    _waveformData = data;
+                    DisplayWaveform(data);
+                    WaveformProgressText = $"完整录波读取完成";
+                }
+                this.RaisePropertyChanged(nameof(CurrentWaveformData));
+                Notice = $"录波数据已更新：每相 {data.Points.Count} 点，6段三相 RMS";
+                RaiseState();
             }
             catch (Exception ex)
             {
-                var message = $"未读取到有效的故障记录时间，无法读取录波数据：{Friendly(ex)}";
-                WaveformProgressText = message;
-                ErrorDialogRequested?.Invoke(this, new ErrorDialogRequest("无法读取录波数据", message));
-                throw new InvalidOperationException(message, ex);
-            }
-
-            var softwareMilliseconds = await _waveformTimeOffsetStore.GetOrCreateAsync(faultRecordTime, token);
-            var timing = new WaveformTiming(
-                faultRecordTime,
-                softwareMilliseconds,
-                waveformTimeRecordType,
-                waveformTimeRecordIndex);
-
-            WaveformProgressText = "正在读取框架等级：1552 (0610H)";
-            var progressStateLock = new object();
-            var progressCompleted = false;
-            var progress = new Progress<WaveformReadProgress>(value =>
-            {
                 lock (progressStateLock)
                 {
-                    // Progress<T> 会异步投递到 UI 队列。读取完成后，队列中可能仍留有最后一次 18/18 回调；
-                    // 完成标志一旦置位，就忽略这些迟到的进度，避免“读取完毕”被重新覆盖为“正在读取”。
-                    if (progressCompleted) return;
-                    var block = value.CurrentBlock;
-                    WaveformProgressText = $"正在读取 {value.CompletedBlocks}/{value.TotalBlocks}：{block.Phase} 相，{block.TimeRangeText}，地址 {block.StartAddress:X4}H";
+                    acceptingProgress = false;
+                    DisplayWaveform(_waveformData);
+                    var reason = ex is OperationCanceledException ? "录波读取已取消" : Friendly(ex);
+                    WaveformProgressText = reason + (_waveformData is null ? "；没有完整录波结果" : "；已恢复上次完整结果");
                 }
-            });
-            var data = (await _waveformService.ReadAsync((byte)address, progress, token)) with
-            {
-                Timing = timing,
-            };
-
-            // 只有 1552 标定参数和 18 个录波块全部成功后，才替换上一次完整结果。
-            _waveformData = data;
-            this.RaisePropertyChanged(nameof(CurrentWaveformData));
-            _phaseASeries.Values = data.Points.Select(point => new ObservablePoint(
-                point.TimeMilliseconds, data.Calibration.ConvertToAmperes(point.PhaseA))).ToArray();
-            _phaseBSeries.Values = data.Points.Select(point => new ObservablePoint(
-                point.TimeMilliseconds, data.Calibration.ConvertToAmperes(point.PhaseB))).ToArray();
-            _phaseCSeries.Values = data.Points.Select(point => new ObservablePoint(
-                point.TimeMilliseconds, data.Calibration.ConvertToAmperes(point.PhaseC))).ToArray();
-            ApplyWaveformTimeAxis(data);
-            FixWaveformYAxis(data);
-            WaveformSummary =
-                $"{data.SampleRateHz:0.###} Hz · 每相 {data.Points.Count} 点 · " +
-                $"A/B/C RMS：{data.PhaseAAmperesRms:0.0} / {data.PhaseBAmperesRms:0.0} / {data.PhaseCAmperesRms:0.0} A · " +
-            // $"{data.Calibration.FrameName}，Rate={data.Calibration.Rate:0.###} · " +
-            // $"{DescribeFaultRecordType(timing.RecordType)}第 {timing.RecordIndex} 条 · " +
-            // $"故障时间 {FaultRecordTimeDecoder.Format(timing.FaultRecordTime)} + 软件补充 {timing.SoftwareMilliseconds} ms（非设备实测） · " +
-            //  $"录波 {timing.WaveformStartTime:yyyy-MM-dd HH:mm:ss.fff}～{data.WaveformEndTime:HH:mm:ss.fffffff}";
-              $"时间 {timing.WaveformStartTime:yyyy-MM-dd HH:mm:ss.fff}";
-            lock (progressStateLock)
-            {
-                progressCompleted = true;
-                WaveformProgressText = $"完整录波读取完成 {data.ReadAt:yyyy-MM-dd HH:mm:ss}";
+                throw;
             }
-            Notice = $"录波数据已更新：每相 {data.Points.Count} 点";
-            this.RaisePropertyChanged(nameof(HasWaveformData));
-            this.RaisePropertyChanged(nameof(HasNoWaveformData));
-            RaiseState();
+            finally
+            {
+                lock (progressStateLock) acceptingProgress = false;
+            }
         }, "读取录波数据失败");
     }
 
@@ -616,11 +610,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         _protectionReadAt = default;
         _faultReadAt = default;
         _waveformData = null;
-        _phaseASeries.Values = Array.Empty<ObservablePoint>();
-        _phaseBSeries.Values = Array.Empty<ObservablePoint>();
-        _phaseCSeries.Values = Array.Empty<ObservablePoint>();
+        ++_waveformReadId;
+        DisplayWaveform(null);
         WaveformProgressText = "尚未读取完整录波数据";
-        WaveformSummary = "采样率、点数和 RMS 将在完整读取后显示";
         InitializeDeviceRows();
         SelectedDataTabIndex = 0;
         this.RaisePropertyChanged(nameof(SelectedDeviceType));
@@ -731,7 +723,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         GeometrySize = 0,
         LineSmoothness = 0,
         XToolTipLabelFormatter = point => $"{point.Coordinate.SecondaryValue:0.####} ms",
-        YToolTipLabelFormatter = point => $"{point.Coordinate.PrimaryValue:0.0} A",
+        YToolTipLabelFormatter = point => $"{point.Coordinate.PrimaryValue:0} AD",
     };
 
     /// <summary>
@@ -742,8 +734,9 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         var axis = WaveformXAxes[0];
         axis.Name = "录波时间";
-        axis.Labeler = value => data.GetAbsoluteTime(value)
-            .ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        axis.Labeler = value => ShouldShowWaveformTimeLabel(value)
+            ? data.GetAbsoluteTime(value).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)
+            : string.Empty;
 
         foreach (var series in new[] { _phaseASeries, _phaseBSeries, _phaseCSeries })
             series.XToolTipLabelFormatter = point => data.GetAbsoluteTime(point.Coordinate.SecondaryValue)
@@ -753,7 +746,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// 使用本次完整录波的三相全部安培值固定 Y 轴。相别显隐只改变曲线集合，不再触发自动缩放。
+    /// 使用已显示时间段的三相全部 AD 值固定 Y 轴。相别显隐只改变曲线集合，不再触发自动缩放。
     /// </summary>
     private void FixWaveformYAxis(WaveformData data)
     {
@@ -766,10 +759,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var maximumAbsoluteValue = data.Points.Max(point => Math.Max(
-            Math.Abs(data.Calibration.ConvertToAmperes(point.PhaseA)),
+            Math.Abs((double)point.PhaseA),
             Math.Max(
-                Math.Abs(data.Calibration.ConvertToAmperes(point.PhaseB)),
-                Math.Abs(data.Calibration.ConvertToAmperes(point.PhaseC)))));
+                Math.Abs((double)point.PhaseB),
+                Math.Abs((double)point.PhaseC))));
         var padding = Math.Max(1.0, maximumAbsoluteValue * 0.08);
         var limit = maximumAbsoluteValue + padding;
         axis.MinLimit = -limit;

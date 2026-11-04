@@ -208,14 +208,14 @@ public sealed class MainViewModelTests
         await viewModel.ReadWaveformCommand.Execute().ToTask();
 
         var axis=Assert.Single(viewModel.WaveformYAxes);
-        Assert.Equal(-21600,axis.MinLimit);
-        Assert.Equal(21600,axis.MaxLimit);
-        Assert.Equal("电流 (A)",axis.Name);
+        Assert.Equal(-24789.24,axis.MinLimit!.Value, 6);
+        Assert.Equal(24789.24,axis.MaxLimit!.Value, 6);
+        Assert.Equal("采样值 (AD)",axis.Name);
         var phaseA=Assert.IsType<LineSeries<ObservablePoint>>(viewModel.WaveformSeries[0]);
         var phaseAPoint=Assert.Single(phaseA.Values!.Cast<ObservablePoint>());
-        Assert.Equal(20000,phaseAPoint.Y);
+        Assert.Equal(22953,phaseAPoint.Y);
         Assert.NotNull(phaseA.YToolTipLabelFormatter);
-        Assert.Contains("20000",viewModel.WaveformSummary);
+        Assert.DoesNotContain("A/B/C RMS",viewModel.WaveformSummary);
         Assert.Contains("框III，Rate=2",viewModel.WaveformSummary);
         Assert.DoesNotContain("框架等级 2",viewModel.WaveformSummary);
         var xAxis=Assert.Single(viewModel.WaveformXAxes);
@@ -228,17 +228,17 @@ public sealed class MainViewModelTests
 
         viewModel.ShowPhaseB=false;
         viewModel.ShowPhaseC=false;
-        Assert.Equal(-21600,axis.MinLimit);
-        Assert.Equal(21600,axis.MaxLimit);
+        Assert.Equal(-24789.24,axis.MinLimit!.Value, 6);
+        Assert.Equal(24789.24,axis.MaxLimit!.Value, 6);
 
         viewModel.ShowPhaseA=false;
         viewModel.ShowPhaseC=true;
-        Assert.Equal(-21600,axis.MinLimit);
-        Assert.Equal(21600,axis.MaxLimit);
+        Assert.Equal(-24789.24,axis.MinLimit!.Value, 6);
+        Assert.Equal(24789.24,axis.MaxLimit!.Value, 6);
     }
 
     [Fact]
-    public async Task Failed_followup_waveform_read_preserves_last_complete_ampere_waveform()
+    public async Task Failed_followup_waveform_read_preserves_last_complete_ad_waveform()
     {
         await using var viewModel=CreateViewModel(
             ["COM10"],
@@ -395,6 +395,183 @@ public sealed class MainViewModelTests
 
     private static IEnumerable<DataItemViewModel> RowItems(DataRowViewModel row) =>
         new[] { row.Left, row.Right }.OfType<DataItemViewModel>();
+
+    [Fact]
+    public async Task Waveform_preview_is_published_only_after_each_complete_three_phase_segment()
+    {
+        MainViewModel? vm = null;
+        var service = new ScriptedWaveformDataService();
+        service.AfterBlock = (call, count) =>
+        {
+            Assert.True(vm!.IsBusy);
+            Assert.False(vm.CanExportWaveform);
+            Assert.Null(vm.CurrentWaveformData);
+            var series = Assert.IsType<LineSeries<ObservablePoint>>(vm.WaveformSeries[0]);
+            Assert.Equal(count / 3 * 64, series.Values!.Count());
+            if (count < 3)
+            {
+                Assert.False(vm.HasWaveformData);
+                vm.UpdateWaveformHover(-80);
+                Assert.Contains("该段尚未读取完成", vm.WaveformHoverText);
+            }
+            else
+            {
+                Assert.True(vm.HasWaveformData);
+                vm.UpdateWaveformHover(-80 + (count / 3 - 1) * 20);
+                Assert.Contains("A相 RMS", vm.WaveformHoverText);
+                if (count < 18)
+                {
+                    vm.UpdateWaveformHover(-80 + count / 3 * 20);
+                    Assert.Contains("该段尚未读取完成", vm.WaveformHoverText);
+                }
+            }
+        };
+        await using var viewModel = vm = CreateViewModel(["COM10"], new AppSettings(PortName: "COM10"),
+            deviceService: new ConnectedDeviceDataService(), waveformService: service);
+        await vm.ToggleSerialCommand.Execute().ToTask();
+        await vm.TestConnectionCommand.Execute().ToTask();
+        await vm.ReadWaveformCommand.Execute().ToTask();
+        Assert.Null(service.AssertionFailure);
+        Assert.Equal(384, vm.CurrentWaveformData!.Points.Count);
+        Assert.True(vm.CanExportWaveform);
+        Assert.Equal(6, vm.CurrentWaveformData.Segments.Count);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Waveform_failed_or_cancelled_preview_restores_complete_snapshot_and_ignores_late_progress(bool withHistory, bool cancel)
+    {
+        var service = new ScriptedWaveformDataService();
+        await using var vm = CreateViewModel(["COM10"], new AppSettings(PortName: "COM10"),
+            deviceService: new ConnectedDeviceDataService(), waveformService: service);
+        await vm.ToggleSerialCommand.Execute().ToTask();
+        await vm.TestConnectionCommand.Execute().ToTask();
+        if (withHistory) await vm.ReadWaveformCommand.Execute().ToTask();
+        Assert.Null(service.AssertionFailure);
+        var previous = vm.CurrentWaveformData;
+        var summary = vm.WaveformSummary;
+        var oldLimit = vm.WaveformYAxes[0].MaxLimit;
+        service.AfterBlock = (_, count) =>
+        {
+            if (count != 6) return;
+            Assert.Same(previous, vm.CurrentWaveformData);
+            Assert.Contains("已完成 2/6 段", vm.WaveformSummary);
+            throw cancel ? new OperationCanceledException() : new InvalidOperationException("B240H读取失败");
+        };
+        await vm.ReadWaveformCommand.Execute().ToTask();
+        Assert.Null(service.AssertionFailure);
+        Assert.Same(previous, vm.CurrentWaveformData);
+        Assert.Equal(summary, vm.WaveformSummary);
+        Assert.Equal(oldLimit, vm.WaveformYAxes[0].MaxLimit);
+        Assert.Equal(withHistory, vm.HasWaveformData);
+        Assert.Equal(withHistory, vm.CanExportWaveform);
+        var status = vm.WaveformProgressText;
+        service.PublishLastProgressAgain();
+        Assert.Equal(status, vm.WaveformProgressText);
+        Assert.Equal(summary, vm.WaveformSummary);
+        if (withHistory) Assert.Contains("已恢复上次完整结果", status);
+        else Assert.Contains("没有完整录波结果", status);
+    }
+
+    [Fact]
+    public async Task Waveform_hover_uses_half_open_segments_and_all_phases_even_when_hidden()
+    {
+        var service = new ScriptedWaveformDataService();
+        await using var vm = CreateViewModel(["COM10"], new AppSettings(PortName: "COM10"),
+            deviceService: new ConnectedDeviceDataService(), waveformService: service);
+        await vm.ToggleSerialCommand.Execute().ToTask();
+        await vm.TestConnectionCommand.Execute().ToTask();
+        await vm.ReadWaveformCommand.Execute().ToTask();
+        Assert.Null(service.AssertionFailure);
+        vm.UpdateWaveformPlotWidth(300);
+        Assert.Equal(string.Empty, vm.WaveformXAxes[0].Labeler!(-60));
+        Assert.NotEqual(string.Empty, vm.WaveformXAxes[0].Labeler!(-80));
+        Assert.NotEqual(string.Empty, vm.WaveformXAxes[0].Labeler!(40));
+        Assert.Equal(20, vm.WaveformXAxes[0].MinStep);
+        vm.UpdateWaveformPlotWidth(900);
+        Assert.NotEqual(string.Empty, vm.WaveformXAxes[0].Labeler!(-60));
+        vm.ShowPhaseA = false;
+        vm.ShowPhaseB = false;
+        vm.ShowPhaseC = false;
+        for (var segment = 0; segment < 6; segment++)
+        {
+            foreach (var time in new[] { -80 + segment * 20.0, -60 + segment * 20.0 - 0.0001 })
+            {
+                vm.UpdateWaveformHover(time);
+                Assert.Equal(segment, vm.HoveredWaveformSegment);
+                Assert.Equal(48, Assert.IsType<SolidColorPaint>(vm.WaveformSections[segment].Fill).Color.Alpha);
+                Assert.Contains("A相 RMS", vm.WaveformHoverText);
+                Assert.Contains("B相 RMS", vm.WaveformHoverText);
+                Assert.Contains("C相 RMS", vm.WaveformHoverText);
+                Assert.Contains("采样值(AD)", vm.WaveformHoverText);
+            }
+        }
+        foreach (var time in new[] { -80.001, 40.0, double.NaN, double.PositiveInfinity })
+        {
+            vm.UpdateWaveformHover(time);
+            Assert.False(vm.HasWaveformHover);
+            Assert.Null(vm.HoveredWaveformSegment);
+            for (var index = 0; index < vm.WaveformSections.Count; index++)
+                Assert.Equal(index % 2 == 0 ? 15 : 4, Assert.IsType<SolidColorPaint>(vm.WaveformSections[index].Fill).Color.Alpha);
+        }
+    }
+
+    [Fact]
+    public async Task Waveform_hover_of_unread_segment_does_not_show_stale_rms()
+    {
+        MainViewModel? vm = null;
+        var service = new ScriptedWaveformDataService();
+        service.AfterBlock = (_, count) =>
+        {
+            if (count != 3) return;
+            vm!.UpdateWaveformHover(-60);
+            Assert.Equal(1, vm.HoveredWaveformSegment);
+            Assert.Contains("该段尚未读取完成", vm.WaveformHoverText);
+            Assert.DoesNotContain("A相 RMS", vm.WaveformHoverText);
+        };
+        await using var viewModel = vm = CreateViewModel(["COM10"], new AppSettings(PortName: "COM10"),
+            deviceService: new ConnectedDeviceDataService(), waveformService: service);
+        await vm.ToggleSerialCommand.Execute().ToTask();
+        await vm.TestConnectionCommand.Execute().ToTask();
+        await vm.ReadWaveformCommand.Execute().ToTask();
+        Assert.Null(service.AssertionFailure);
+        Assert.NotNull(vm.CurrentWaveformData);
+    }
+
+    private sealed class ScriptedWaveformDataService : IWaveformDataService
+    {
+        public Action<int, int>? AfterBlock { get; set; }
+        public Exception? AssertionFailure { get; private set; }
+        private int _calls;
+        private IProgress<WaveformReadProgress>? _progress;
+        private WaveformReadProgress? _lastProgress;
+        public void PublishLastProgressAgain() => _progress!.Report(_lastProgress!);
+        public Task<WaveformData> ReadAsync(byte slaveAddress, IProgress<WaveformReadProgress>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            _calls++;
+            _progress = progress;
+            var calibration = WaveformCalibration.FromRegisterValue(0x0204);
+            var points = Enumerable.Range(0, 384).Select(index => new WaveformPoint(index, index / 64, index % 64,
+                WaveformCatalog.GetTimeMilliseconds(index), (short)(_calls * 100 + index), (short)-index, 0,
+                0, 0, 0)).ToArray();
+            var data = WaveformTestData.Create(DateTimeOffset.Now, 3200, points, calibration);
+            for (var index = 0; index < 18; index++)
+            {
+                var segment = data.Segments[index / 3];
+                var block = (index % 3) switch { 0 => segment.PhaseA, 1 => segment.PhaseB, _ => segment.PhaseC };
+                _lastProgress = new WaveformReadProgress(index + 1, 18, block.Definition, block,
+                    calibration, index % 3 == 2 ? segment : null);
+                progress?.Report(_lastProgress);
+                try { AfterBlock?.Invoke(_calls, index + 1); }
+                catch (Xunit.Sdk.XunitException ex) { AssertionFailure = ex; throw; }
+            }
+            return Task.FromResult(data);
+        }
+    }
 
     private static MainViewModel CreateViewModel(
         IReadOnlyList<string> ports,
@@ -610,21 +787,16 @@ public sealed class MainViewModelTests
                 progress?.Report(new WaveformReadProgress(
                     WaveformCatalog.TotalBlocks,
                     WaveformCatalog.TotalBlocks,
-                    lastBlock));
+                    lastBlock,
+                    WaveformBlockResult.Create(lastBlock, new short[64], WaveformCalibration.FromRegisterValue(0x0204)),
+                    WaveformCalibration.FromRegisterValue(0x0204), null));
             },cancellationToken);
 
             IReadOnlyList<WaveformPoint> points=
             [
                 new WaveformPoint(0,0,0,-80,22953,-22953,0,0xAC00,0xAC80,0xAD00),
             ];
-            return Task.FromResult(new WaveformData(
-                new DateTimeOffset(2026,8,11,12,0,0,TimeSpan.FromHours(8)),
-                3200,
-                points,
-                22953,
-                22953,
-                0,
-                WaveformCalibration.FromRegisterValue(0x0204)));
+            return Task.FromResult(WaveformTestData.Create(new DateTimeOffset(2026,8,11,12,0,0,TimeSpan.FromHours(8)), 3200, points, WaveformCalibration.FromRegisterValue(0x0204)));
         }
     }
 
@@ -658,9 +830,7 @@ public sealed class MainViewModelTests
             [
                 new WaveformPoint(0,0,0,-80,22953,-22953,0,0xB000,0xB040,0xB080),
             ];
-            return Task.FromResult(new WaveformData(
-                DateTimeOffset.Now,3200,points,22953,22953,0,
-                WaveformCalibration.FromRegisterValue(0x0204)));
+            return Task.FromResult(WaveformTestData.Create(DateTimeOffset.Now, 3200, points, WaveformCalibration.FromRegisterValue(0x0204)));
         }
     }
 

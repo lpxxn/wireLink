@@ -23,14 +23,7 @@ public sealed class WaveformPointDetailsViewModelTests
         var points = Enumerable.Range(0, WaveformCatalog.PointsPerPhase)
             .Select(CreatePoint)
             .ToArray();
-        var data = new WaveformData(
-            new DateTimeOffset(2026, 8, 10, 12, 34, 56, TimeSpan.FromHours(8)),
-            WaveformCatalog.SampleRateHz,
-            points,
-            1,
-            2,
-            3,
-            WaveformCalibration.FromRegisterValue(0x0204));
+        var data = WaveformTestData.Create(new DateTimeOffset(2026, 8, 10, 12, 34, 56, TimeSpan.FromHours(8)), WaveformCatalog.SampleRateHz, points, WaveformCalibration.FromRegisterValue(0x0204));
 
         var viewModel = new WaveformPointDetailsViewModel(data);
 

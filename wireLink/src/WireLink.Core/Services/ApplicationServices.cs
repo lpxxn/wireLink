@@ -333,8 +333,8 @@ public sealed class WaveformDataService(IModbusRtuClient client, IProtocolTrace?
             throw new InvalidOperationException(message, ex);
         }
 
-        var phaseValues = Enum.GetValues<WaveformPhase>()
-            .ToDictionary(phase => phase, _ => new short[WaveformCatalog.PointsPerPhase]);
+        var blocks = new Dictionary<WaveformPhase, WaveformBlockResult>();
+        var segments = new List<WaveformSegmentResult>();
         var completed = 0;
 
         foreach (var block in WaveformCatalog.Blocks)
@@ -349,17 +349,26 @@ public sealed class WaveformDataService(IModbusRtuClient client, IProtocolTrace?
                         $"录波块返回数量错误：期望 {block.Count}，收到 {raw.Length}。");
 
                 var samples = WaveformSampleDecoder.DecodeSignedSamples(raw);
-                var destination = phaseValues[block.Phase];
-                var destinationIndex = block.SegmentIndex * WaveformCatalog.SamplesPerBlock;
-                samples.CopyTo(destination, destinationIndex);
+                var result = WaveformBlockResult.Create(block, samples, calibration);
+                blocks[block.Phase] = result;
+                WaveformSegmentResult? completedSegment = null;
+                if (blocks.Count == WaveformCatalog.PhaseCount)
+                {
+                    completedSegment = new WaveformSegmentResult(
+                        blocks[WaveformPhase.A], blocks[WaveformPhase.B], blocks[WaveformPhase.C]);
+                    segments.Add(completedSegment);
+                    blocks.Clear();
+                }
 
                 completed++;
-                progress?.Report(new WaveformReadProgress(completed, WaveformCatalog.TotalBlocks, block));
+                progress?.Report(new WaveformReadProgress(completed, WaveformCatalog.TotalBlocks,
+                    block, result, calibration, completedSegment));
                 _trace.Debug(
                     $"录波块读取成功；相别={block.Phase}；时间={block.TimeRangeText}；" +
                     $"地址={block.StartAddress}～{block.EndAddress} " +
                     $"(0x{block.StartAddress:X4}～0x{block.EndAddress:X4})；" +
-                    $"点数={samples.Length}；首值={samples[0]}；末值={samples[^1]}");
+                    $"点数={samples.Length}；首值={samples[0]}；末值={samples[^1]}；" +
+                    $"AD-RMS={result.AdRms:R}；RMS(A)={result.AmperesRms:0.0}");
             }
             catch (OperationCanceledException)
             {
@@ -376,35 +385,11 @@ public sealed class WaveformDataService(IModbusRtuClient client, IProtocolTrace?
             }
         }
 
-        var points = new WaveformPoint[WaveformCatalog.PointsPerPhase];
-        for (var sampleIndex = 0; sampleIndex < points.Length; sampleIndex++)
-        {
-            var segmentIndex = sampleIndex / WaveformCatalog.SamplesPerBlock;
-            var segmentSampleIndex = sampleIndex % WaveformCatalog.SamplesPerBlock;
-            var aBlock = WaveformCatalog.GetBlock(segmentIndex, WaveformPhase.A);
-            var bBlock = WaveformCatalog.GetBlock(segmentIndex, WaveformPhase.B);
-            var cBlock = WaveformCatalog.GetBlock(segmentIndex, WaveformPhase.C);
-
-            points[sampleIndex] = new WaveformPoint(
-                sampleIndex,
-                segmentIndex,
-                segmentSampleIndex,
-                WaveformCatalog.GetTimeMilliseconds(sampleIndex),
-                phaseValues[WaveformPhase.A][sampleIndex],
-                phaseValues[WaveformPhase.B][sampleIndex],
-                phaseValues[WaveformPhase.C][sampleIndex],
-                checked((ushort)(aBlock.StartAddress + segmentSampleIndex)),
-                checked((ushort)(bBlock.StartAddress + segmentSampleIndex)),
-                checked((ushort)(cBlock.StartAddress + segmentSampleIndex)));
-        }
-
         return new WaveformData(
             readAt,
             WaveformCatalog.SampleRateHz,
-            points,
-            WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.A]),
-            WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.B]),
-            WaveformSampleDecoder.CalculateRms(phaseValues[WaveformPhase.C]),
+            Array.AsReadOnly(segments.SelectMany(segment => segment.Points).ToArray()),
+            Array.AsReadOnly(segments.ToArray()),
             calibration);
     }
 }

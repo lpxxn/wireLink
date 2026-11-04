@@ -7,6 +7,19 @@ var portName = Option("--port", "");
 var baud = int.Parse(Option("--baud", "9600"));
 var address = byte.Parse(Option("--address", "1"));
 var protectionModeText = Option("--protection-mode", "3");
+var waveformSourceText = Option("--waveform-source", "recorded");
+var waveformSource = waveformSourceText.ToLowerInvariant() switch
+{
+    "recorded" => SimulatorWaveformSource.Recorded20261104,
+    "pdf" => SimulatorWaveformSource.Pdf,
+    _ => (SimulatorWaveformSource?)null,
+};
+if (waveformSource is null)
+{
+    Console.Error.WriteLine("录波样本只支持 recorded（提供的Excel原始点）或 pdf（协议样例）。");
+    PrintUsage();
+    return 2;
+}
 if (string.IsNullOrWhiteSpace(portName))
 {
     PrintUsage();
@@ -20,7 +33,7 @@ if (!byte.TryParse(protectionModeText, out var protectionMode) || protectionMode
 }
 
 using var port = new SerialPort(portName, baud, Parity.None, 8, StopBits.One) { Handshake = Handshake.None };
-var engine = new SimulatorEngine(address);
+var engine = new SimulatorEngine(address, waveformSource.Value);
 engine.SetGroundProtectionMode(protectionMode);
 using var shutdown = new CancellationTokenSource();
 port.Open();
@@ -33,6 +46,7 @@ void RequestShutdown()
 
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; RequestShutdown(); };
 Console.WriteLine($"WireLink 模拟器已打开 {portName}，{baud} BPS，从机 {address}。输入 help 查看命令。");
+Console.WriteLine($"录波样本：{engine.WaveformSourceName}（仅复现原始AD，1552标定为框II/Rate=1.5）。");
 
 var serialTask = Task.Run(async () =>
 {
@@ -81,7 +95,7 @@ _ = Task.Run(() =>
             case "fault": SetCurrent("fault"); break;
             case "alarm": SetCurrent("alarm"); break;
             case "protection" or "ground": SetProtectionMode(parts.ElementAtOrDefault(1)); break;
-            case "status": Console.WriteLine($"模式={engine.FaultMode}，当前事件={engine.CurrentEventMode}，保护模式={DescribeProtectionMode(engine.GroundProtectionMode)}，从机={address}，寄存器={engine.RegisterCount}"); break;
+            case "status": Console.WriteLine($"模式={engine.FaultMode}，当前事件={engine.CurrentEventMode}，保护模式={DescribeProtectionMode(engine.GroundProtectionMode)}，从机={address}，寄存器={engine.RegisterCount}，录波={engine.WaveformSourceName}"); break;
             case "help": PrintCommands(); break;
             default: Console.WriteLine("未知命令，输入 help 查看帮助。"); break;
         }
@@ -137,4 +151,4 @@ static void PrintCommands() => Console.WriteLine(
     "fault | alarm | protection 0|1|2|3 | disconnect | status | quit");
 
 static void PrintUsage() => Console.Error.WriteLine(
-    "用法：WireLink.Simulator --port <串口> [--baud 9600] [--address 1] [--protection-mode 0|1|2|3]");
+    "用法：WireLink.Simulator --port <串口> [--baud 9600] [--address 1] [--protection-mode 0|1|2|3] [--waveform-source recorded|pdf]");

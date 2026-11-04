@@ -6,17 +6,22 @@ namespace WireLink.Simulator;
 
 public enum SimulatorFaultMode { Normal, TimeoutOnce, TimeoutContinuous, BadCrcOnce, ExceptionOnce }
 public enum SimulatorCurrentEventMode { Normal, Fault, Alarm }
+public enum SimulatorWaveformSource { Recorded20261104, Pdf }
 
 /// <summary>可独立测试的 Modbus RTU 从站协议内核。</summary>
-public sealed class SimulatorEngine(byte slaveAddress = 1)
+public sealed class SimulatorEngine(byte slaveAddress = 1,
+    SimulatorWaveformSource waveformSource = SimulatorWaveformSource.Recorded20261104)
 {
     private readonly object _sync = new();
-    private readonly Dictionary<ushort, ushort> _registers = CreateRegisters();
+    private readonly Dictionary<ushort, ushort> _registers = CreateRegisters(waveformSource);
     private readonly Dictionary<(byte Type, byte Index), ushort[]> _records = CreateRecords();
     private byte _selectedType;
     private byte _selectedIndex;
 
     public byte SlaveAddress { get; } = slaveAddress;
+    public SimulatorWaveformSource WaveformSource { get; } = waveformSource;
+    public string WaveformSourceName => WaveformSource == SimulatorWaveformSource.Pdf
+        ? "故障录波协议说明.pdf" : RecordedWaveformSampleCatalog.SourceFileName;
     public SimulatorFaultMode FaultMode { get; set; }
     public SimulatorCurrentEventMode CurrentEventMode { get; private set; } = SimulatorCurrentEventMode.Normal;
     public byte GroundProtectionMode
@@ -143,7 +148,7 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         _registers[785] = (ushort)((_selectedIndex << 8) | _selectedType);
     }
 
-    private static Dictionary<ushort, ushort> CreateRegisters()
+    private static Dictionary<ushort, ushort> CreateRegisters(SimulatorWaveformSource waveformSource)
     {
         var map = new Dictionary<ushort, ushort>();
         foreach (var (start, count) in new[]
@@ -164,8 +169,8 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         map[279] = 68;
         SetUInt32(map, 336, 12345); SetUInt32(map, 338, 12410); SetUInt32(map, 340, 12280); SetUInt32(map, 342, 980);
         SetUInt32(map, 352, 2301); SetUInt32(map, 354, 2310); SetUInt32(map, 356, 2294);
-        // 1552.bit0～bit7=4，对应 BW1/BW3 的 630A；bit8～bit11=3 模拟非零框架等级。
-        map[512] = 0x0002; map[784] = 0x0444; map[1552] = 0x0204; map[1031] = 128;
+        // 1552.bit0～bit7=4，对应 BW1/BW3 的 630A；bit8～bit11=1，模拟框II/Rate=1.5。
+        map[512] = 0x0002; map[784] = 0x0444; map[1552] = 0x0104; map[1031] = 128;
         // 框架控制器保护数据；1793.bit12～bit10=3，按地电流型解析。
         map[1793] = 0x0C00;
         map[1280] = 630;
@@ -173,12 +178,21 @@ public sealed class SimulatorEngine(byte slaveAddress = 1)
         map[1286] = 1; map[1287] = 315; map[1288] = 8;
         map[1296] = 250; map[1297] = 200; map[1298] = 0x141E; map[1299] = 0x141E;
         map[1300] = 100; map[1301] = 1000;
-        LoadWaveformRegisters(map);
+        LoadWaveformRegisters(map, waveformSource);
         return map;
     }
 
-    private static void LoadWaveformRegisters(Dictionary<ushort, ushort> map)
+    private static void LoadWaveformRegisters(Dictionary<ushort, ushort> map, SimulatorWaveformSource source)
     {
+        if (source == SimulatorWaveformSource.Recorded20261104)
+        {
+            foreach (var block in RecordedWaveformSampleCatalog.Blocks)
+                for (var index = 0; index < block.Registers.Count; index++)
+                    map[checked((ushort)(block.StartAddress + index))] = block.Registers[index];
+            return;
+        }
+        if (source != SimulatorWaveformSource.Pdf)
+            throw new ArgumentOutOfRangeException(nameof(source));
         foreach (var frame in PdfWaveformSampleCatalog.Frames)
         {
             var registers = frame.Registers.Span;

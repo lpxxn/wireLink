@@ -141,70 +141,90 @@ public sealed class ClosedXmlExportService : IExcelExportService
     {
         var data = context.Data;
         var timing = data.Timing ?? throw new InvalidOperationException("录波数据没有故障记录时间，不能导出绝对时间。");
+        if (data.Segments.Count != WaveformCatalog.SegmentCount || data.Points.Count != WaveformCatalog.PointsPerPhase)
+            throw new InvalidOperationException("仅允许导出6个完整时间段的录波数据。");
         var sheet = workbook.Worksheets.Add("波形数据");
         sheet.Cell(1, 1).Value = context.Title;
         sheet.Cell(2, 1).Value = "读取时间";
         sheet.Cell(2, 2).Value = data.ReadAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
         sheet.Cell(3, 1).Value = "采样率(Hz)";
         sheet.Cell(3, 2).Value = data.SampleRateHz;
+        // sheet.Cell(3, 4).Value = "1552原值";
+        // sheet.Cell(3, 5).Value = (int)data.Calibration.RegisterValue;
+        sheet.Cell(3, 4).Value = "框架";
+        sheet.Cell(3, 5).Value = data.Calibration.FrameName;
         sheet.Cell(4, 1).Value = "每相点数";
         sheet.Cell(4, 2).Value = data.Points.Count;
-        sheet.Cell(3, 3).Value = "框架";
-        sheet.Cell(3, 4).Value = data.Calibration.FrameName;
-        sheet.Cell(4, 3).Value = "Rate";
-        sheet.Cell(4, 4).Value = data.Calibration.Rate;
-        sheet.Cell(4, 5).Value = "每AD安培系数";
-        sheet.Cell(4, 6).Value = data.Calibration.AmperesPerAd;
-        sheet.Cell(5, 1).Value = "A相 RMS(A)";
-        sheet.Cell(5, 2).Value = data.PhaseAAmperesRms;
-        sheet.Cell(5, 3).Value = "B相 RMS(A)";
-        sheet.Cell(5, 4).Value = data.PhaseBAmperesRms;
-        sheet.Cell(5, 5).Value = "C相 RMS(A)";
-        sheet.Cell(5, 6).Value = data.PhaseCAmperesRms;
-        sheet.Cell(6, 1).Value = "换算公式";
-        sheet.Cell(6, 2).Value = "有符号AD值 × 10000 ÷ 22953 × Rate";
+        sheet.Cell(4, 4).Value = "Rate";
+        sheet.Cell(4, 5).Value = data.Calibration.Rate;
+        // sheet.Cell(4, 7).Value = "记录";
+        // sheet.Cell(4, 8).Value = $"{DescribeFaultRecordType(timing.RecordType)} / 第 {timing.RecordIndex} 条";
+        // sheet.Cell(5, 1).Value = "故障时间";
+        // sheet.Cell(5, 2).Value = timing.FaultRecordTime;
+        // sheet.Cell(5, 2).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss";
+        // sheet.Cell(6, 1).Value = "软件补充毫秒";
+        // sheet.Cell(6, 2).Value = timing.SoftwareMilliseconds;
+        // sheet.Cell(6, 4).Value = "非设备实测毫秒";
+        // sheet.Cell(6, 1).Value = "录波首点";
+        // sheet.Cell(6, 2).Value = timing.WaveformStartTime;
+        // sheet.Cell(6, 2).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
+        // sheet.Cell(6, 4).Value = "录波末点";
+        // sheet.Cell(6, 5).Value = data.WaveformEndTime;
+        // sheet.Cell(6, 5).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
+        // sheet.Cell(8, 1).Value = "分块RMS公式";
+        // sheet.Cell(8, 2).Value = "sqrt(sum(有符号AD²)/64) × 10000.0 ÷ 22953.0 × Rate";
+        // sheet.Cell(9, 1).Value = "单位说明";
+        // sheet.Cell(9, 2).Value = "采样行保留有符号AD；每64行后的RMS行单位为A，保留1位小数";
 
-        var headerRow = 8;
-        foreach (var (column, value) in new[]
-                 {
-                     (1, "采样序号"), (2, "相对时间(ms)"), (3, "绝对采样时间"),
-                     (4, "A相(A)"), (5, "B相(A)"), (6, "C相(A)"),
-                 })
-            sheet.Cell(headerRow, column).Value = value;
-
-        foreach (var (point, index) in data.Points.Select((point, index) => (point, index)))
+        const int headerRow = 6;
+        var headers = new[] { "类型", "时间段", "点号", "相对时间(ms)", "绝对采样时间", "单位", "A相", "B相", "C相" };
+        for (var column = 0; column < headers.Length; column++)
+            sheet.Cell(headerRow, column + 1).Value = headers[column];
+        var row = headerRow;
+        foreach (var segment in data.Segments)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var row = headerRow + index + 1;
-            sheet.Cell(row, 1).Value = point.SampleIndex;
-            sheet.Cell(row, 2).Value = point.TimeMilliseconds;
-            var absoluteTimeCell = sheet.Cell(row, 3);
-            absoluteTimeCell.Value = data.GetAbsoluteTime(point.TimeMilliseconds);
-            // Excel 内部把日期时间保存成类似 46225.60418 的序列值。
-            // 明确给每个数据单元格设置到毫秒的日期格式，避免部分 Excel/WPS 版本按“常规”格式显示序列值。
-            absoluteTimeCell.Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
-            sheet.Cell(row, 4).Value = data.Calibration.ConvertToAmperes(point.PhaseA);
-            sheet.Cell(row, 5).Value = data.Calibration.ConvertToAmperes(point.PhaseB);
-            sheet.Cell(row, 6).Value = data.Calibration.ConvertToAmperes(point.PhaseC);
+            foreach (var point in segment.Points)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                row++;
+                sheet.Cell(row, 1).Value = "采样";
+                sheet.Cell(row, 2).Value = segment.TimeRangeText;
+                sheet.Cell(row, 3).Value = point.SampleIndex + 1;
+                sheet.Cell(row, 4).Value = point.TimeMilliseconds;
+                sheet.Cell(row, 4).Style.NumberFormat.Format = "0.0000";
+                WriteWaveformTime(sheet.Cell(row, 5), data.GetAbsoluteTime(point.TimeMilliseconds));
+                sheet.Cell(row, 6).Value = "AD";
+                sheet.Cell(row, 7).Value = (int)point.PhaseA;
+                sheet.Cell(row, 8).Value = (int)point.PhaseB;
+                sheet.Cell(row, 9).Value = (int)point.PhaseC;
+                sheet.Range(row, 7, row, 9).Style.NumberFormat.Format = "0";
+            }
+            row++;
+            sheet.Cell(row, 1).Value = "RMS";
+            sheet.Cell(row, 2).Value = segment.TimeRangeText;
+            sheet.Cell(row, 6).Value = "A";
+            sheet.Cell(row, 7).Value = segment.PhaseA.AmperesRms;
+            sheet.Cell(row, 8).Value = segment.PhaseB.AmperesRms;
+            sheet.Cell(row, 9).Value = segment.PhaseC.AmperesRms;
+            sheet.Range(row, 7, row, 9).Style.NumberFormat.Format = "0.0";
+            var summary = sheet.Range(row, 1, row, 9);
+            summary.Style.Font.Bold = true;
+            summary.Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF3FF");
+            summary.Style.Border.TopBorder = XLBorderStyleValues.Thin;
         }
-        sheet.Column(2).Style.NumberFormat.Format = "0.0000";
-        sheet.Column(3).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
-        sheet.Cell(3, 2).Style.NumberFormat.Format = null;
-        sheet.Cell(4, 2).Style.NumberFormat.Format = null;
-        sheet.Columns(4, 6).Style.NumberFormat.Format = "0.00";
-        sheet.Cell(7, 4).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss";
-        sheet.Cell(8, 2).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
-        sheet.Cell(8, 4).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
-        foreach (var column in new[] { 2, 4, 6 })
-            sheet.Cell(5, column).Style.NumberFormat.Format = "0.0";
-
         sheet.Row(headerRow).Style.Font.Bold = true;
         sheet.Row(headerRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF3FF");
         sheet.SheetView.FreezeRows(headerRow);
-        sheet.Range(headerRow, 1, headerRow + data.Points.Count, 6).SetAutoFilter();
-        sheet.Column(1).Width = 12;
-        sheet.Column(2).Width = 16;
-        sheet.Column(3).Width = 25;
+        sheet.PageSetup.SetRowsToRepeatAtTop(headerRow, headerRow);
+        sheet.PageSetup.PageOrientation = XLPageOrientation.Landscape;
+        sheet.PageSetup.FitToPages(1, 0);
+        sheet.Column(1).Width = 18;
+        sheet.Column(2).Width = 28;
+        sheet.Column(3).Width = 10;
+        sheet.Column(4).Width = 18;
+        sheet.Column(5).Width = 27;
+        sheet.Column(6).Width = 10;
+        sheet.Columns(7, 9).Width = 16;
     }
 
     private static void WriteWaveformDetailSheet(
@@ -221,7 +241,7 @@ public sealed class ClosedXmlExportService : IExcelExportService
                  {
                      (1, "段"), (2, "时间段"), (3, "相别"), (4, "段内序号"),
                      (5, "全局序号"), (6, "相对时间(ms)"), (7, "绝对采样时间"),
-                     (8, "地址"), (9, "地址HEX"), (10, "AD值"), (11, "电流(A)"),
+                     (8, "地址"), (9, "地址HEX"), (10, "AD值"),
                  })
             sheet.Cell(headerRow, column).Value = value;
 
@@ -248,28 +268,30 @@ public sealed class ClosedXmlExportService : IExcelExportService
                 sheet.Cell(row, 5).Value = point.SampleIndex;
                 sheet.Cell(row, 6).Value = point.TimeMilliseconds;
                 var absoluteTimeCell = sheet.Cell(row, 7);
-                absoluteTimeCell.Value = data.GetAbsoluteTime(point.TimeMilliseconds);
-                absoluteTimeCell.Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
+                WriteWaveformTime(absoluteTimeCell, data.GetAbsoluteTime(point.TimeMilliseconds));
                 sheet.Cell(row, 8).Value = (int)address;
                 sheet.Cell(row, 9).Value = $"0x{address:X4}";
                 sheet.Cell(row, 10).Value = (int)value;
-                sheet.Cell(row, 11).Value = data.Calibration.ConvertToAmperes(value);
             }
         }
         sheet.Column(6).Style.NumberFormat.Format = "0.0000";
         sheet.Column(7).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
-        sheet.Column(11).Style.NumberFormat.Format = "0.0";
-        sheet.Cell(2, 4).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss";
-        sheet.Cell(2, 8).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
-        sheet.Cell(2, 10).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
 
         sheet.Row(headerRow).Style.Font.Bold = true;
         sheet.Row(headerRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF3FF");
         sheet.SheetView.FreezeRows(headerRow);
-        sheet.Range(headerRow, 1, row, 11).SetAutoFilter();
+        sheet.Range(headerRow, 1, row, 10).SetAutoFilter();
         sheet.Column(1).Width = 9;
         sheet.Column(2).Width = 18;
         sheet.Column(3).Width = 9;
-        sheet.Column(7).Width = 25;
+        sheet.Column(7).Width = 27;
+        sheet.Columns(8, 10).Width = 16;
+    }
+
+    private static void WriteWaveformTime(IXLCell cell, DateTime time)
+    {
+        // DateTime.ToOADate会截断不足1ms的ticks。直接写Excel日期序列，保留0.3125ms间隔。
+        cell.Value = (time.Ticks - new DateTime(1899, 12, 30).Ticks) / (double)TimeSpan.TicksPerDay;
+        cell.Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
     }
 }

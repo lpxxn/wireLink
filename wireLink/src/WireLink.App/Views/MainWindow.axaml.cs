@@ -18,12 +18,14 @@ public partial class MainWindow : Window
     private RegisterReaderWindow? _registerReaderWindow;
     private SlaveAddressScannerWindow? _slaveAddressScannerWindow;
     private WaveformPointDetailsWindow? _waveformPointDetailsWindow;
+    private RmsCalculatorWindow? _rmsCalculatorWindow;
     private IModbusRtuClient? _client;
 
     public MainWindow()
     {
         InitializeComponent();
         Opened += OnOpened;
+        KeyDown += OnKeyDown;
     }
 
     public MainWindow(MainViewModel viewModel, IModbusRtuClient client, IExcelExportService export, ILogStore logStore)
@@ -40,10 +42,35 @@ public partial class MainWindow : Window
             if (args.PropertyName == nameof(MainViewModel.CurrentWaveformData))
                 _waveformPointDetailsWindow?.SetData(viewModel.CurrentWaveformData);
         };
-        KeyDown += OnKeyDown;
     }
 
     private void OnPortDropDownOpened(object? sender, EventArgs e) => (DataContext as MainViewModel)?.RefreshPorts();
+
+    private void OnWaveformChartSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        // 使用控件宽度减去纵轴预留；不依赖尚未完成本轮布局的DrawMargin。
+        (DataContext as MainViewModel)?.UpdateWaveformPlotWidth(Math.Max(0, e.NewSize.Width - 110));
+    }
+
+    private void OnWaveformPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel) return;
+        var pixel = e.GetPosition(WaveformChart);
+        var core = WaveformChart.CoreChart;
+        var origin = core.DrawMarginLocation;
+        var size = core.DrawMarginSize;
+        if (size.Width <= 0 || size.Height <= 0 || pixel.X < origin.X || pixel.Y < origin.Y ||
+            pixel.X >= origin.X + size.Width || pixel.Y >= origin.Y + size.Height)
+        {
+            viewModel.ClearWaveformHover();
+            return;
+        }
+        var coordinate = WaveformChart.ScalePixelsToData(new LiveChartsCore.Drawing.LvcPointD(pixel.X, pixel.Y));
+        viewModel.UpdateWaveformHover(coordinate.X);
+    }
+
+    private void OnWaveformPointerExited(object? sender, PointerEventArgs e) =>
+        (DataContext as MainViewModel)?.ClearWaveformHover();
     private async void OnErrorDialogRequested(object? sender, ErrorDialogRequest request)
     {
         var dialog = new ErrorDialogWindow(request);
@@ -59,6 +86,11 @@ public partial class MainWindow : Window
         if (e.Key == Key.F1)
         {
             ShowAboutWindow();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F9 && e.KeyModifiers == KeyModifiers.None)
+        {
+            ShowRmsCalculatorWindow();
             e.Handled = true;
         }
         else if (e.Key == Key.F8 && e.KeyModifiers.HasFlag(KeyModifiers.Shift)
@@ -127,6 +159,19 @@ public partial class MainWindow : Window
         _registerReaderWindow = new RegisterReaderWindow(new RegisterReaderViewModel(_client, mainViewModel));
         _registerReaderWindow.Closed += (_, _) => _registerReaderWindow = null;
         _registerReaderWindow.Show();
+    }
+
+    private void ShowRmsCalculatorWindow()
+    {
+        if (_rmsCalculatorWindow is { } existing)
+        {
+            if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
+            existing.Activate();
+            return;
+        }
+        _rmsCalculatorWindow = new RmsCalculatorWindow();
+        _rmsCalculatorWindow.Closed += (_, _) => _rmsCalculatorWindow = null;
+        _rmsCalculatorWindow.Show(this);
     }
 
     private void ShowWaveformPointDetailsWindow()
