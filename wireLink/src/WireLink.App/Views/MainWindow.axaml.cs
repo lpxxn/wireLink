@@ -6,6 +6,8 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using WireLink.App.ViewModels;
 using WireLink.Core.Communication;
+using WireLink.Core.Models;
+using WireLink.Core.Registers;
 using WireLink.Core.Services;
 
 namespace WireLink.App.Views;
@@ -50,6 +52,8 @@ public partial class MainWindow : Window
     {
         // 使用控件宽度减去纵轴预留；不依赖尚未完成本轮布局的DrawMargin。
         (DataContext as MainViewModel)?.UpdateWaveformPlotWidth(Math.Max(0, e.NewSize.Width - 110));
+        // 缩放后绘图区会重新布局，等鼠标再次命中时使用新的坐标定位。
+        (DataContext as MainViewModel)?.ClearWaveformHover();
     }
 
     private void OnWaveformPointerMoved(object? sender, PointerEventArgs e)
@@ -67,6 +71,36 @@ public partial class MainWindow : Window
         }
         var coordinate = WaveformChart.ScalePixelsToData(new LiveChartsCore.Drawing.LvcPointD(pixel.X, pixel.Y));
         viewModel.UpdateWaveformHover(coordinate.X);
+        PositionWaveformHoverCard();
+    }
+
+    private void OnWaveformHoverCardSizeChanged(object? sender, SizeChangedEventArgs e) =>
+        PositionWaveformHoverCard();
+
+    private void PositionWaveformHoverCard()
+    {
+        if (DataContext is not MainViewModel { HasWaveformHover: true, HoveredWaveformSegment: { } segment })
+            return;
+
+        var core = WaveformChart.CoreChart;
+        var origin = core.DrawMarginLocation;
+        var size = core.DrawMarginSize;
+        if (size.Width <= 0 || size.Height <= 0) return;
+
+        const double padding = 8;
+        WaveformHoverCard.MaxWidth = Math.Max(1, Math.Min(360, size.Width - padding * 2));
+        var cardSize = WaveformHoverCard.Bounds.Size;
+        if (cardSize.Width <= 0 || cardSize.Height <= 0) return;
+
+        var block = WaveformCatalog.GetBlock(segment, WaveformPhase.A);
+        var midpoint = block.SegmentStartMilliseconds + 10;
+        var anchor = WaveformChart.ScaleDataToPixels(new LiveChartsCore.Drawing.LvcPointD(midpoint, 0));
+        var left = Math.Clamp(anchor.X - cardSize.Width / 2,
+            origin.X + padding, Math.Max(origin.X + padding, origin.X + size.Width - cardSize.Width - padding));
+        var top = Math.Clamp(origin.Y + padding,
+            padding, Math.Max(padding, WaveformHoverLayer.Bounds.Height - cardSize.Height - padding));
+        Canvas.SetLeft(WaveformHoverCard, left);
+        Canvas.SetTop(WaveformHoverCard, top);
     }
 
     private void OnWaveformPointerExited(object? sender, PointerEventArgs e) =>

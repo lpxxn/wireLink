@@ -463,13 +463,15 @@
                       <TextBlock Text="每段三相读取完成后立即显示；完整读取成功后可导出。"
                                  Opacity=".56" MaxWidth="420" TextAlignment="Center" TextWrapping="Wrap"/>
                     </StackPanel>
-                    <Border IsVisible="{Binding HasWaveformHover}" IsHitTestVisible="False"
-                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="58,36,8,8" MaxWidth="360"
-                            Background="{DynamicResource WaveformPanelBackgroundBrush}"
-                            BorderBrush="{DynamicResource WaveformPanelBorderBrush}" BorderThickness="1"
-                            CornerRadius="8" Padding="12">
-                      <TextBlock Text="{Binding WaveformHoverText}" TextWrapping="Wrap" FontSize="12"/>
-                    </Border>
+                    <Canvas x:Name="WaveformHoverLayer" IsHitTestVisible="False">
+                      <Border x:Name="WaveformHoverCard" IsVisible="{Binding HasWaveformHover}"
+                              SizeChanged="OnWaveformHoverCardSizeChanged" MaxWidth="360"
+                              Background="{DynamicResource WaveformPanelBackgroundBrush}"
+                              BorderBrush="{DynamicResource WaveformPanelBorderBrush}" BorderThickness="1"
+                              CornerRadius="8" Padding="12">
+                        <TextBlock Text="{Binding WaveformHoverText}" TextWrapping="Wrap" FontSize="12"/>
+                      </Border>
+                    </Canvas>
                   </Grid>
                 </Border>
             </Grid>
