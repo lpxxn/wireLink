@@ -134,7 +134,8 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     ];
     public Axis[] WaveformYAxes { get; } =
     [
-        new Axis { Name = "采样值 (AD)", Labeler = value => value.ToString("0") },
+        // 保留纵轴范围与网格，只隐藏标题和数值刻度。
+        new Axis { Name = string.Empty, Labeler = _ => string.Empty },
     ];
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> RefreshPortsCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ToggleSerialCommand { get; }

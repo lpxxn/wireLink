@@ -438,10 +438,9 @@
               </Grid>
 
               <Border Grid.Row="1" Background="{DynamicResource WaveformPanelBackgroundBrush}" BorderBrush="{DynamicResource WaveformPanelBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14,10">
-                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="3">
+                <Grid RowDefinitions="Auto,Auto" RowSpacing="3">
                   <TextBlock Text="{Binding WaveformSummary}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                   <TextBlock Grid.Row="1" Text="{Binding WaveformProgressText}" Opacity=".62" TextWrapping="Wrap"/>
-                  <TextBlock Grid.Column="1" Grid.RowSpan="2" Text="曲线：AD；RMS：A" Foreground="{DynamicResource WaveformAccentBrush}" VerticalAlignment="Center"/>
                 </Grid>
               </Border>
 

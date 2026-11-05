@@ -210,7 +210,8 @@ public sealed class MainViewModelTests
         var axis=Assert.Single(viewModel.WaveformYAxes);
         Assert.Equal(-24789.24,axis.MinLimit!.Value, 6);
         Assert.Equal(24789.24,axis.MaxLimit!.Value, 6);
-        Assert.Equal("采样值 (AD)",axis.Name);
+        Assert.Equal(string.Empty,axis.Name);
+        Assert.Equal(string.Empty,axis.Labeler!(100));
         var phaseA=Assert.IsType<LineSeries<ObservablePoint>>(viewModel.WaveformSeries[0]);
         var phaseAPoint=Assert.Single(phaseA.Values!.Cast<ObservablePoint>());
         Assert.Equal(22953,phaseAPoint.Y);
