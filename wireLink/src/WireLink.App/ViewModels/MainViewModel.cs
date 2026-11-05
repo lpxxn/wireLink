@@ -134,8 +134,17 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     ];
     public Axis[] WaveformYAxes { get; } =
     [
-        // 保留纵轴范围与网格，只隐藏标题和数值刻度。
-        new Axis { Name = string.Empty, Labeler = _ => string.Empty },
+        // TextSize 同时决定刻度短线长度，设为 0 避免绘制短线。
+        new Axis
+        {
+            Name = "录波",
+            Labeler = _ => string.Empty,
+            TextSize = 0,
+            ShowSeparatorLines = false,
+            DrawTicksPath = true,
+            TicksPaint = new SolidColorPaint(new SKColor(148, 163, 184)) { StrokeThickness = 1 },
+            SubticksPaint = null,
+        },
     ];
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> RefreshPortsCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ToggleSerialCommand { get; }

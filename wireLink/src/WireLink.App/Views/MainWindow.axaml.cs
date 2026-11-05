@@ -26,6 +26,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // 起始时间以纵轴为中心绘制，左侧预留空间，避免完整时间文字被控件边缘裁切。
+        WaveformChart.DrawMargin = new LiveChartsCore.Measure.Margin(
+            43, LiveChartsCore.Measure.Margin.Auto,
+            LiveChartsCore.Measure.Margin.Auto, LiveChartsCore.Measure.Margin.Auto);
         Opened += OnOpened;
         KeyDown += OnKeyDown;
     }

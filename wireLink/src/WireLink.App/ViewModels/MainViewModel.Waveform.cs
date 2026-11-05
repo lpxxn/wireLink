@@ -71,8 +71,8 @@ public sealed partial class MainViewModel
             var timing = data.Timing!;
             WaveformSummary = $"{(preview ? "读取预览" : "完整录波")} · {data.SampleRateHz:0.###} Hz · " +
                 $"已完成 {data.Segments.Count}/6 段 · 每相 {data.Points.Count} 点 · " +
-                $"{data.Calibration.FrameName}，Rate={data.Calibration.Rate:0.###}"; // · " +
-                                                                                    // $"故障时间 {timing.FaultRecordTime:yyyy-MM-dd HH:mm:ss} + 软件补充 {timing.SoftwareMilliseconds} ms（非设备实测） · " +
+                $"{data.Calibration.FrameName}，Rate={data.Calibration.Rate:0.###} · " +
+                $"故障时间 {timing.FaultRecordTime:yyyy-MM-dd HH:mm:ss}" ;//  · 软件补充 {timing.SoftwareMilliseconds} ms（非设备实测） · " +
                                                                                     // $"录波 {timing.WaveformStartTime:yyyy-MM-dd HH:mm:ss.fff}～{data.WaveformEndTime:HH:mm:ss.fffffff}";
         }
         else
