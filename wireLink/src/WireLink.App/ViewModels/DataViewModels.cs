@@ -45,6 +45,8 @@ public sealed record DataRowViewModel(DataItemViewModel Left, DataItemViewModel?
 /// <summary>故障记录类型的界面选项；显示中文，协议值仍使用原枚举。</summary>
 public sealed record FaultRecordTypeOption(FaultRecordType Value, string DisplayName);
 
+public sealed record DeviceTypeOption(DeviceType Value, string DisplayName);
+
 public sealed record ExportRequest(string Title, IReadOnlyList<DecodedValue> Values,
     DateTimeOffset ReadAt, FaultRecordType? RecordType = null, byte? RecordIndex = null);
 

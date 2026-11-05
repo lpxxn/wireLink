@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Samples\recorded-waveform-20261104.json" />
     <ProjectReference Include="..\WireLink.Core\WireLink.Core.csproj" />
     <PackageReference Include="System.IO.Ports" />
   </ItemGroup>

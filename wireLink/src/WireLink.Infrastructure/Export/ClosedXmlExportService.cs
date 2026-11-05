@@ -82,24 +82,24 @@ public sealed class ClosedXmlExportService : IExcelExportService
             "C 地址", "C 原值(hex)", "C 原值(dec)", "C 值(AD)",
         };
         for (var column = 0; column < headers.Length; column++)
-            sheet.Cell(1,column + 1).Value = headers[column];
+            sheet.Cell(1, column + 1).Value = headers[column];
 
-        foreach (var (point,index) in context.Data.Points.Select((point,index) => (point,index)))
+        foreach (var (point, index) in context.Data.Points.Select((point, index) => (point, index)))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var row = index + 2;
             var segmentStart = -80 + point.SegmentIndex * 20;
-            sheet.Cell(row,1).Value = point.SampleIndex + 1;
-            sheet.Cell(row,2).Value = $"{segmentStart}～{segmentStart + 20} ms";
-            sheet.Cell(row,3).Value = point.SegmentSampleIndex + 1;
-            sheet.Cell(row,4).Value = point.TimeMilliseconds;
-            WritePointPhase(sheet,row,5,point.PhaseAAddress,point.PhaseA);
-            WritePointPhase(sheet,row,9,point.PhaseBAddress,point.PhaseB);
-            WritePointPhase(sheet,row,13,point.PhaseCAddress,point.PhaseC);
+            sheet.Cell(row, 1).Value = point.SampleIndex + 1;
+            sheet.Cell(row, 2).Value = $"{segmentStart}～{segmentStart + 20} ms";
+            sheet.Cell(row, 3).Value = point.SegmentSampleIndex + 1;
+            sheet.Cell(row, 4).Value = point.TimeMilliseconds;
+            WritePointPhase(sheet, row, 5, point.PhaseAAddress, point.PhaseA);
+            WritePointPhase(sheet, row, 9, point.PhaseBAddress, point.PhaseB);
+            WritePointPhase(sheet, row, 13, point.PhaseCAddress, point.PhaseC);
 
             // 与窗口一致：每个 64 点时间段的第 1 点使用浅黄色标出数据块边界。
             if (point.SegmentSampleIndex == 0)
-                sheet.Range(row,1,row,headers.Length).Style.Fill.BackgroundColor = XLColor.FromHtml("#FFF3CD");
+                sheet.Range(row, 1, row, headers.Length).Style.Fill.BackgroundColor = XLColor.FromHtml("#FFF3CD");
         }
 
         sheet.Row(1).Style.Font.Bold = true;
@@ -113,13 +113,13 @@ public sealed class ClosedXmlExportService : IExcelExportService
         return Task.CompletedTask;
     }
 
-    private static void WritePointPhase(IXLWorksheet sheet,int row,int startColumn,ushort address,short value)
+    private static void WritePointPhase(IXLWorksheet sheet, int row, int startColumn, ushort address, short value)
     {
         var raw = unchecked((ushort)value);
-        sheet.Cell(row,startColumn).Value = $"{address:X4}H";
-        sheet.Cell(row,startColumn + 1).Value = $"{raw:X4}H";
-        sheet.Cell(row,startColumn + 2).Value = (int)raw;
-        sheet.Cell(row,startColumn + 3).Value = (int)value;
+        sheet.Cell(row, startColumn).Value = $"{address:X4}H";
+        sheet.Cell(row, startColumn + 1).Value = $"{raw:X4}H";
+        sheet.Cell(row, startColumn + 2).Value = (int)raw;
+        sheet.Cell(row, startColumn + 3).Value = (int)value;
     }
 
     private static void WriteValue(IXLWorksheet sheet, int row, int column, DecodedValue value)
@@ -140,39 +140,91 @@ public sealed class ClosedXmlExportService : IExcelExportService
         CancellationToken cancellationToken)
     {
         var data = context.Data;
+        var timing = data.Timing ?? throw new InvalidOperationException("录波数据没有故障记录时间，不能导出绝对时间。");
+        if (data.Segments.Count != WaveformCatalog.SegmentCount || data.Points.Count != WaveformCatalog.PointsPerPhase)
+            throw new InvalidOperationException("仅允许导出6个完整时间段的录波数据。");
         var sheet = workbook.Worksheets.Add("波形数据");
         sheet.Cell(1, 1).Value = context.Title;
         sheet.Cell(2, 1).Value = "读取时间";
         sheet.Cell(2, 2).Value = data.ReadAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
         sheet.Cell(3, 1).Value = "采样率(Hz)";
         sheet.Cell(3, 2).Value = data.SampleRateHz;
+        // sheet.Cell(3, 4).Value = "1552原值";
+        // sheet.Cell(3, 5).Value = (int)data.Calibration.RegisterValue;
+        sheet.Cell(3, 4).Value = "框架";
+        sheet.Cell(3, 5).Value = data.Calibration.FrameName;
         sheet.Cell(4, 1).Value = "每相点数";
         sheet.Cell(4, 2).Value = data.Points.Count;
-        sheet.Cell(5, 1).Value = "A相 AD-RMS";
-        sheet.Cell(5, 2).Value = data.PhaseARms;
-        sheet.Cell(5, 3).Value = "B相 AD-RMS";
-        sheet.Cell(5, 4).Value = data.PhaseBRms;
-        sheet.Cell(5, 5).Value = "C相 AD-RMS";
-        sheet.Cell(5, 6).Value = data.PhaseCRms;
+        sheet.Cell(4, 4).Value = "Rate";
+        sheet.Cell(4, 5).Value = data.Calibration.Rate;
+        // sheet.Cell(4, 7).Value = "记录";
+        // sheet.Cell(4, 8).Value = $"{DescribeFaultRecordType(timing.RecordType)} / 第 {timing.RecordIndex} 条";
+        // sheet.Cell(5, 1).Value = "故障时间";
+        // sheet.Cell(5, 2).Value = timing.FaultRecordTime;
+        // sheet.Cell(5, 2).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss";
+        // sheet.Cell(6, 1).Value = "软件补充毫秒";
+        // sheet.Cell(6, 2).Value = timing.SoftwareMilliseconds;
+        // sheet.Cell(6, 4).Value = "非设备实测毫秒";
+        // sheet.Cell(6, 1).Value = "录波首点";
+        // sheet.Cell(6, 2).Value = timing.WaveformStartTime;
+        // sheet.Cell(6, 2).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
+        // sheet.Cell(6, 4).Value = "录波末点";
+        // sheet.Cell(6, 5).Value = data.WaveformEndTime;
+        // sheet.Cell(6, 5).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
+        // sheet.Cell(8, 1).Value = "分块RMS公式";
+        // sheet.Cell(8, 2).Value = "sqrt(sum(有符号AD²)/64) × 10000.0 ÷ 22953.0 × Rate";
+        // sheet.Cell(9, 1).Value = "单位说明";
+        // sheet.Cell(9, 2).Value = "采样行保留有符号AD；每64行后的RMS行单位为A，保留1位小数";
 
-        var headerRow = 7;
-        foreach (var (column, value) in new[]
-                 {
-                     (1, "采样序号"), (2, "时间(ms)"), (3, "A相AD"),
-                     (4, "B相AD"), (5, "C相AD"),
-                 })
-            sheet.Cell(headerRow, column).Value = value;
-
-        foreach (var (point, index) in data.Points.Select((point, index) => (point, index)))
+        const int headerRow = 6;
+        var headers = new[] { "类型", "时间段", "点号", "相对时间(ms)", "绝对采样时间", "单位", "A相", "B相", "C相" };
+        for (var column = 0; column < headers.Length; column++)
+            sheet.Cell(headerRow, column + 1).Value = headers[column];
+        var row = headerRow;
+        foreach (var segment in data.Segments)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var row = headerRow + index + 1;
-            sheet.Cell(row, 1).Value = point.SampleIndex;
-            sheet.Cell(row, 2).Value = point.TimeMilliseconds;
-            sheet.Cell(row, 3).Value = (int)point.PhaseA;
-            sheet.Cell(row, 4).Value = (int)point.PhaseB;
-            sheet.Cell(row, 5).Value = (int)point.PhaseC;
+            foreach (var point in segment.Points)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                row++;
+                sheet.Cell(row, 1).Value = "采样";
+                sheet.Cell(row, 2).Value = segment.TimeRangeText;
+                sheet.Cell(row, 3).Value = point.SampleIndex + 1;
+                sheet.Cell(row, 4).Value = point.TimeMilliseconds;
+                sheet.Cell(row, 4).Style.NumberFormat.Format = "0.0000";
+                WriteWaveformTime(sheet.Cell(row, 5), data.GetAbsoluteTime(point.TimeMilliseconds));
+                sheet.Cell(row, 6).Value = "AD";
+                sheet.Cell(row, 7).Value = (int)point.PhaseA;
+                sheet.Cell(row, 8).Value = (int)point.PhaseB;
+                sheet.Cell(row, 9).Value = (int)point.PhaseC;
+                sheet.Range(row, 7, row, 9).Style.NumberFormat.Format = "0";
+            }
+            row++;
+            sheet.Cell(row, 1).Value = "RMS";
+            sheet.Cell(row, 2).Value = segment.TimeRangeText;
+            sheet.Cell(row, 6).Value = "A";
+            sheet.Cell(row, 7).Value = segment.PhaseA.AmperesRms;
+            sheet.Cell(row, 8).Value = segment.PhaseB.AmperesRms;
+            sheet.Cell(row, 9).Value = segment.PhaseC.AmperesRms;
+            sheet.Range(row, 7, row, 9).Style.NumberFormat.Format = "0.0";
+            var summary = sheet.Range(row, 1, row, 9);
+            summary.Style.Font.Bold = true;
+            summary.Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF3FF");
+            summary.Style.Border.TopBorder = XLBorderStyleValues.Thin;
         }
+        sheet.Row(headerRow).Style.Font.Bold = true;
+        sheet.Row(headerRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF3FF");
+        sheet.SheetView.FreezeRows(headerRow);
+        sheet.PageSetup.SetRowsToRepeatAtTop(headerRow, headerRow);
+        sheet.PageSetup.PageOrientation = XLPageOrientation.Landscape;
+        sheet.PageSetup.FitToPages(1, 0);
+        sheet.Column(1).Width = 18;
+        sheet.Column(2).Width = 28;
+        sheet.Column(3).Width = 10;
+        sheet.Column(4).Width = 18;
+        sheet.Column(5).Width = 27;
+        sheet.Column(6).Width = 10;
+        sheet.Columns(7, 9).Width = 16;
     }
 
     private static void WriteWaveformDetailSheet(
@@ -180,17 +232,21 @@ public sealed class ClosedXmlExportService : IExcelExportService
         WaveformExcelExportContext context,
         CancellationToken cancellationToken)
     {
+        var data = context.Data;
         var sheet = workbook.Worksheets.Add("读取明细");
+        sheet.Cell(1, 1).Value = "录波读取明细";
+
+        const int headerRow = 3;
         foreach (var (column, value) in new[]
                  {
                      (1, "段"), (2, "时间段"), (3, "相别"), (4, "段内序号"),
-                     (5, "全局序号"), (6, "时间(ms)"), (7, "地址"),
-                     (8, "地址HEX"), (9, "AD值"),
+                     (5, "全局序号"), (6, "相对时间(ms)"), (7, "绝对采样时间"),
+                     (8, "地址"), (9, "地址HEX"), (10, "AD值"),
                  })
-            sheet.Cell(1, column).Value = value;
+            sheet.Cell(headerRow, column).Value = value;
 
-        var row = 1;
-        foreach (var point in context.Data.Points)
+        var row = headerRow;
+        foreach (var point in data.Points)
         {
             foreach (var phase in Enum.GetValues<WaveformPhase>())
             {
@@ -211,10 +267,31 @@ public sealed class ClosedXmlExportService : IExcelExportService
                 sheet.Cell(row, 4).Value = point.SegmentSampleIndex;
                 sheet.Cell(row, 5).Value = point.SampleIndex;
                 sheet.Cell(row, 6).Value = point.TimeMilliseconds;
-                sheet.Cell(row, 7).Value = (int)address;
-                sheet.Cell(row, 8).Value = $"0x{address:X4}";
-                sheet.Cell(row, 9).Value = (int)value;
+                var absoluteTimeCell = sheet.Cell(row, 7);
+                WriteWaveformTime(absoluteTimeCell, data.GetAbsoluteTime(point.TimeMilliseconds));
+                sheet.Cell(row, 8).Value = (int)address;
+                sheet.Cell(row, 9).Value = $"0x{address:X4}";
+                sheet.Cell(row, 10).Value = (int)value;
             }
         }
+        sheet.Column(6).Style.NumberFormat.Format = "0.0000";
+        sheet.Column(7).Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
+
+        sheet.Row(headerRow).Style.Font.Bold = true;
+        sheet.Row(headerRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF3FF");
+        sheet.SheetView.FreezeRows(headerRow);
+        sheet.Range(headerRow, 1, row, 10).SetAutoFilter();
+        sheet.Column(1).Width = 9;
+        sheet.Column(2).Width = 18;
+        sheet.Column(3).Width = 9;
+        sheet.Column(7).Width = 27;
+        sheet.Columns(8, 10).Width = 16;
+    }
+
+    private static void WriteWaveformTime(IXLCell cell, DateTime time)
+    {
+        // DateTime.ToOADate会截断不足1ms的ticks。直接写Excel日期序列，保留0.3125ms间隔。
+        cell.Value = (time.Ticks - new DateTime(1899, 12, 30).Ticks) / (double)TimeSpan.TicksPerDay;
+        cell.Style.NumberFormat.Format = "yyyy-mm-dd hh:mm:ss.000";
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Avalonia.Media;
 using LiveChartsCore;
 using LiveChartsCore.Defaults;
@@ -16,13 +17,15 @@ using WireLink.Core.Services;
 namespace WireLink.App.ViewModels;
 
 /// <summary>主窗口状态机：串口、设备连接、互斥读取、自动刷新和导出入口。</summary>
-public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
+public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 {
     private readonly IModbusRtuClient _client;
     private readonly ISerialPortCatalog _ports;
     private readonly IDeviceDataService _deviceService;
+    private readonly IProtectionDataService _protectionService;
     private readonly IFaultRecordService _faultService;
     private readonly IWaveformDataService _waveformService;
+    private readonly IWaveformTimeOffsetStore _waveformTimeOffsetStore;
     private readonly ISettingsService _settingsService;
     private readonly IProtocolTrace _trace;
     private CancellationTokenSource? _operationCancellation;
@@ -42,53 +45,66 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     private string _notice = string.Empty;
     private AppThemeMode _theme;
     private string _controllerName;
+    private DeviceTypeOption _selectedDevice;
     private FaultRecordTypeOption _selectedFaultRecordType;
     private int? _faultRecordIndex = 1;
     private DateTimeOffset _deviceReadAt;
     private DateTimeOffset _faultReadAt;
+    private DateTimeOffset _protectionReadAt;
     private FaultRecordType _lastReadFaultRecordType;
     private byte _lastReadFaultRecordIndex;
     private WaveformData? _waveformData;
     private string _waveformProgressText = "尚未读取完整录波数据";
-    private string _waveformSummary = "采样率、点数和 RMS 将在完整读取后显示";
+    private string _waveformSummary = "每完成一个时间段，即显示三相 AD 和分块 RMS";
     private bool _showPhaseA = true;
     private bool _showPhaseB = true;
     private bool _showPhaseC = true;
+    private int _selectedDataTabIndex;
     private readonly LineSeries<ObservablePoint> _phaseASeries = CreateWaveformSeries("A 相");
     private readonly LineSeries<ObservablePoint> _phaseBSeries = CreateWaveformSeries("B 相");
     private readonly LineSeries<ObservablePoint> _phaseCSeries = CreateWaveformSeries("C 相");
 
     public MainViewModel(IModbusRtuClient client, ISerialPortCatalog ports, IDeviceDataService deviceService,
-        IFaultRecordService faultService, IWaveformDataService waveformService,
+        IProtectionDataService protectionService, IFaultRecordService faultService, IWaveformDataService waveformService,
+        IWaveformTimeOffsetStore waveformTimeOffsetStore,
         ISettingsService settingsService, IProtocolTrace trace, AppSettings settings)
     {
-        _client = client; _ports = ports; _deviceService = deviceService; _faultService = faultService;
-        _waveformService = waveformService; _settingsService = settingsService; _trace = trace;
+        _client = client; _ports = ports; _deviceService = deviceService; _protectionService = protectionService;
+        _faultService = faultService;
+        _waveformService = waveformService; _waveformTimeOffsetStore = waveformTimeOffsetStore;
+        _settingsService = settingsService; _trace = trace;
         _portName = settings.PortName; _baudRate = settings.BaudRate; _deviceAddress = settings.DeviceAddress;
         _refreshSeconds = settings.RefreshSeconds; _theme = settings.Theme;
         _controllerName = settings.ControllerSeries == BreakerSeries.BW3 ? "BW3 的控制器" : "BW1 的控制器";
+        _selectedDevice = DeviceOptions.Single(option => option.Value == settings.DeviceType);
         _selectedFaultRecordType = FaultRecordTypes[0];
         _readTimeoutMilliseconds = settings.ReadTimeoutMilliseconds; _faultDelayMilliseconds = settings.FaultReadyDelayMilliseconds;
         RefreshPortsCommand = ReactiveCommand.Create(RefreshPorts);
         ToggleSerialCommand = ReactiveCommand.CreateFromTask(ToggleSerialAsync);
         TestConnectionCommand = ReactiveCommand.CreateFromTask(TestConnectionAsync);
         ReadDeviceCommand = ReactiveCommand.CreateFromTask(ReadDeviceAsync);
+        ReadProtectionCommand = ReactiveCommand.CreateFromTask(ReadProtectionAsync);
         ReadFaultCommand = ReactiveCommand.CreateFromTask(ReadFaultAsync);
         ReadWaveformCommand = ReactiveCommand.CreateFromTask(ReadWaveformAsync);
         ExportDeviceCommand = ReactiveCommand.Create(RequestDeviceExport);
+        ExportProtectionCommand = ReactiveCommand.Create(RequestProtectionExport);
         ExportFaultCommand = ReactiveCommand.Create(RequestFaultExport);
         ExportWaveformCommand = ReactiveCommand.Create(RequestWaveformExport);
         ShowLogCommand = ReactiveCommand.Create(() => ShowLogRequested?.Invoke(this, EventArgs.Empty));
         RefreshPorts();
-        Merge(DeviceRows, CreatePlaceholders(RegisterCatalog.DeviceDefinitions), null);
-        Merge(FaultRows, CreatePlaceholders(RegisterCatalog.FaultDefinitions), null);
+        InitializeDeviceRows();
         RefreshWaveformSeries();
     }
 
     public ObservableCollection<string> PortNames { get; } = [];
-    public IReadOnlyList<int> BaudRates { get; } = [9600, 19200, 38400, 115200];
+    public IReadOnlyList<int> BaudRates { get; } = [2400, 4800, 9600, 19200, 38400, 115200];
     public IReadOnlyList<AppThemeMode> Themes { get; } = Enum.GetValues<AppThemeMode>();
     public IReadOnlyList<string> ControllerOptions { get; } = ["BW1 的控制器", "BW3 的控制器"];
+    public IReadOnlyList<DeviceTypeOption> DeviceOptions { get; } =
+    [
+        new(DeviceType.FrameController, "框架控制器"),
+        new(DeviceType.MoldedCaseCircuitBreaker, "塑壳断路器"),
+    ];
     public IReadOnlyList<FaultRecordTypeOption> FaultRecordTypes { get; } =
     [
         new(FaultRecordType.Fault,"故障"),
@@ -96,13 +112,14 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         new(FaultRecordType.StateChange,"变位"),
     ];
     public ObservableCollection<DataRowViewModel> DeviceRows { get; } = [];
+    public ObservableCollection<DataRowViewModel> ProtectionRows { get; } = [];
     public ObservableCollection<DataRowViewModel> FaultRows { get; } = [];
     public ObservableCollection<ISeries> WaveformSeries { get; } = [];
     public Axis[] WaveformXAxes { get; } =
     [
         new Axis
         {
-            Name = "相对故障时间 (ms)",
+            Name = "录波时间",
             MinLimit = -80,
             MaxLimit = 40,
             MinStep = 20,
@@ -117,15 +134,27 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     ];
     public Axis[] WaveformYAxes { get; } =
     [
-        new Axis { Name = "原始采样值 (AD)", Labeler = value => value.ToString("0") },
+        // TextSize 同时决定刻度短线长度，设为 0 避免绘制短线。
+        new Axis
+        {
+            Name = "录波",
+            Labeler = _ => string.Empty,
+            TextSize = 0,
+            ShowSeparatorLines = false,
+            DrawTicksPath = true,
+            TicksPaint = new SolidColorPaint(new SKColor(148, 163, 184)) { StrokeThickness = 1 },
+            SubticksPaint = null,
+        },
     ];
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> RefreshPortsCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ToggleSerialCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> TestConnectionCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ReadDeviceCommand { get; }
+    public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ReadProtectionCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ReadFaultCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ReadWaveformCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ExportDeviceCommand { get; }
+    public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ExportProtectionCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ExportFaultCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ExportWaveformCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> ShowLogCommand { get; }
@@ -219,6 +248,27 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         get => _controllerName;
         set { this.RaiseAndSetIfChanged(ref _controllerName, value); _ = SaveSettingsAsync(); }
     }
+    public DeviceTypeOption SelectedDevice
+    {
+        get => _selectedDevice;
+        set
+        {
+            if (value is null || value == _selectedDevice || IsBusy) return;
+            this.RaiseAndSetIfChanged(ref _selectedDevice, value);
+            HandleDeviceTypeChanged();
+            _ = SaveSettingsAsync();
+        }
+    }
+    public DeviceType SelectedDeviceType => SelectedDevice.Value;
+    public bool IsFrameController => SelectedDeviceType == DeviceType.FrameController;
+    public bool IsMoldedCaseCircuitBreaker => SelectedDeviceType == DeviceType.MoldedCaseCircuitBreaker;
+    public bool HasProtectionData => DeviceProfileCatalog.Get(SelectedDeviceType).ProtectionData is not null;
+    public bool CanSelectDeviceType => !IsBusy;
+    public int SelectedDataTabIndex
+    {
+        get => _selectedDataTabIndex;
+        set => this.RaiseAndSetIfChanged(ref _selectedDataTabIndex, value);
+    }
     private BreakerSeries SelectedControllerSeries =>
         ControllerName == "BW3 的控制器" ? BreakerSeries.BW3 : BreakerSeries.BW1;
     public AppThemeMode Theme { get => _theme; set { this.RaiseAndSetIfChanged(ref _theme, value); ThemeChanged?.Invoke(this, value); _ = SaveSettingsAsync(); } }
@@ -247,13 +297,17 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     public bool CanTest => IsSerialOpen && !IsBusy && DeviceAddress is not null;
     public bool CanRead => IsDeviceConnected && !IsBusy && DeviceAddress is not null;
     public bool CanAutoRefresh => CanRead && RefreshSeconds is not null;
-    public bool CanReadFault => CanRead && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
+    public bool CanReadProtection => CanRead && HasProtectionData;
+    public bool CanReadFault => CanRead && IsFrameController && FaultRecordIndex is not null && FaultDelayMilliseconds is not null;
+    // 录波时间固定取“故障第 0 条（最近一条）”，不依赖故障数据页当前选择的类型和序号。
+    public bool CanReadWaveform => CanRead && IsFrameController && FaultDelayMilliseconds is not null;
     public bool CanExportDevice => _deviceReadAt != default && IsDeviceConnected && !IsBusy;
-    public bool CanExportFault => _faultReadAt != default && IsDeviceConnected && !IsBusy;
-    public bool CanExportWaveform => _waveformData is not null && IsDeviceConnected && !IsBusy;
+    public bool CanExportProtection => _protectionReadAt != default && IsDeviceConnected && !IsBusy && HasProtectionData;
+    public bool CanExportFault => _faultReadAt != default && IsDeviceConnected && !IsBusy && IsFrameController;
+    public bool CanExportWaveform => _waveformData is not null && IsDeviceConnected && !IsBusy && IsFrameController;
     public WaveformData? CurrentWaveformData => _waveformData;
-    public bool HasWaveformData => _waveformData is not null;
-    public bool HasNoWaveformData => _waveformData is null;
+    public bool HasWaveformData => _displayedWaveformData?.Points.Count > 0;
+    public bool HasNoWaveformData => !HasWaveformData;
     public string WaveformProgressText
     {
         get => _waveformProgressText;
@@ -347,7 +401,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         await RunBusyAsync(async token =>
         {
-            if (await _deviceService.TestConnectionAsync((byte)address, token))
+            if (await _deviceService.TestConnectionAsync((byte)address, SelectedDeviceType, token))
             {
                 IsDeviceConnected = true; _consecutiveFailures = 0;
                 Notice = $"设备 {address} 连接测试成功"; await SaveSettingsAsync();
@@ -367,10 +421,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         await RunBusyAsync(async token =>
         {
             var result = await _deviceService.ReadAsync(
-                (byte)address, WordOrder.HighWordFirst, SelectedControllerSeries, token);
+                (byte)address, SelectedDeviceType, WordOrder.HighWordFirst, SelectedControllerSeries, token);
+            var definitions = DeviceProfileCatalog.Get(SelectedDeviceType).DeviceData.Definitions;
             Merge(
                 DeviceRows,
-                ForTable(result.Values, RegisterCatalog.DeviceDefinitions),
+                result.Values,
                 result.Errors.Count > 0 ? "本区间读取失败，显示上次成功值" : null);
             _deviceReadAt = result.ReadAt;
             if (result.Errors.Count > 0)
@@ -380,6 +435,27 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
             }
             else { _consecutiveFailures = 0; Notice = $"设备数据已更新 {result.ReadAt:HH:mm:ss}"; }
         }, "读取设备数据失败", countFailure: true);
+    }
+
+    private async Task ReadProtectionAsync()
+    {
+        if (!CanReadProtection || DeviceAddress is not int address) return;
+        await RunBusyAsync(async token =>
+        {
+            var profile = DeviceProfileCatalog.Get(SelectedDeviceType);
+            var definitions = profile.ProtectionData?.Definitions
+                ?? throw new InvalidOperationException($"{profile.DisplayName}保护数据目录未配置。");
+            var result = await _protectionService.ReadAsync(
+                (byte)address, SelectedDeviceType, WordOrder.HighWordFirst, SelectedControllerSeries, token);
+            Merge(
+                ProtectionRows,
+                result.Values,
+                result.Errors.Count > 0 ? "本区间读取失败，显示上次成功值" : null);
+            _protectionReadAt = result.ReadAt;
+            Notice = result.Errors.Count == 0
+                ? $"保护数据已更新 {result.ReadAt:HH:mm:ss}"
+                : $"保护数据部分读取失败：{result.Errors[0]}";
+        }, "读取保护数据失败");
     }
 
     private async Task ReadFaultAsync()
@@ -398,7 +474,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
             Merge(
                 FaultRows,
-                ForTable(result.Values, RegisterCatalog.FaultDefinitions),
+                result.Values,
                 result.Errors.Count > 0 ? "本字段读取失败，显示上次成功值" : null);
             _faultReadAt = result.ReadAt;
             _lastReadFaultRecordType = selectedType;
@@ -411,42 +487,86 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task ReadWaveformAsync()
     {
-        if (!CanRead || DeviceAddress is not int address) return;
+        if (!CanReadWaveform || DeviceAddress is not int address ||
+            FaultDelayMilliseconds is not int faultDelayMilliseconds)
+            return;
         await RunBusyAsync(async token =>
         {
-            WaveformProgressText = $"准备读取 0/{WaveformCatalog.TotalBlocks}";
+            var operationId = ++_waveformReadId;
             var progressStateLock = new object();
-            var progressCompleted = false;
-            var progress = new Progress<WaveformReadProgress>(value =>
+            var acceptingProgress = true;
+            var previewSegments = new List<WaveformSegmentResult>();
+            var previewReadAt = DateTimeOffset.Now;
+            DisplayWaveform(null);
+            try
+            {
+                const FaultRecordType waveformTimeRecordType = FaultRecordType.Fault;
+                const byte waveformTimeRecordIndex = 0;
+                WaveformProgressText = "正在读取故障记录时间：故障，第 0 条记录（最近一条）";
+                DateTime faultRecordTime;
+                try
+                {
+                    faultRecordTime = await _faultService.ReadTimestampAsync(
+                        (byte)address, waveformTimeRecordType, waveformTimeRecordIndex,
+                        TimeSpan.FromMilliseconds(faultDelayMilliseconds), token);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    var message = $"未读取到有效的故障记录时间，无法读取录波数据：{Friendly(ex)}";
+                    ErrorDialogRequested?.Invoke(this, new ErrorDialogRequest("无法读取录波数据", message));
+                    throw new InvalidOperationException(message, ex);
+                }
+
+                var softwareMilliseconds = await _waveformTimeOffsetStore.GetOrCreateAsync(faultRecordTime, token);
+                var timing = new WaveformTiming(faultRecordTime, softwareMilliseconds,
+                    waveformTimeRecordType, waveformTimeRecordIndex);
+                WaveformProgressText = "正在读取框架等级：1552 (0610H)";
+                var progress = new WaveformUiProgress(value =>
+                {
+                    lock (progressStateLock)
+                    {
+                        if (!acceptingProgress || operationId != _waveformReadId) return;
+                        var block = value.CurrentBlock;
+                        WaveformProgressText = $"已读取 {value.CompletedBlocks}/{value.TotalBlocks}：{block.Phase} 相，{block.TimeRangeText}，地址 {block.StartAddress:X4}H";
+                        if (value.CompletedSegment is { } segment && segment.SegmentIndex == previewSegments.Count)
+                        {
+                            previewSegments.Add(segment);
+                            DisplayWaveform(new WaveformData(previewReadAt, WaveformCatalog.SampleRateHz,
+                                Array.AsReadOnly(previewSegments.SelectMany(item => item.Points).ToArray()),
+                                Array.AsReadOnly(previewSegments.ToArray()), value.Calibration)
+                            { Timing = timing }, preview: true);
+                        }
+                    }
+                });
+                var data = (await _waveformService.ReadAsync((byte)address, progress, token)) with { Timing = timing };
+                token.ThrowIfCancellationRequested();
+                lock (progressStateLock)
+                {
+                    acceptingProgress = false;
+                    _waveformData = data;
+                    DisplayWaveform(data);
+                    WaveformProgressText = $"完整录波读取完成";
+                }
+                this.RaisePropertyChanged(nameof(CurrentWaveformData));
+                Notice = $"录波数据已更新：每相 {data.Points.Count} 点，6段三相 RMS";
+                RaiseState();
+            }
+            catch (Exception ex)
             {
                 lock (progressStateLock)
                 {
-                    // Progress<T> 会异步投递到 UI 队列。读取完成后，队列中可能仍留有最后一次 18/18 回调；
-                    // 完成标志一旦置位，就忽略这些迟到的进度，避免“读取完毕”被重新覆盖为“正在读取”。
-                    if (progressCompleted) return;
-                    var block = value.CurrentBlock;
-                    WaveformProgressText = $"正在读取 {value.CompletedBlocks}/{value.TotalBlocks}：{block.Phase} 相，{block.TimeRangeText}，地址 {block.StartAddress:X4}H";
+                    acceptingProgress = false;
+                    DisplayWaveform(_waveformData);
+                    var reason = ex is OperationCanceledException ? "录波读取已取消" : Friendly(ex);
+                    WaveformProgressText = reason + (_waveformData is null ? "；没有完整录波结果" : "；已恢复上次完整结果");
                 }
-            });
-            var data = await _waveformService.ReadAsync((byte)address, progress, token);
-
-            // 只有 18 块全部成功后才替换上一次完整结果。
-            _waveformData = data;
-            this.RaisePropertyChanged(nameof(CurrentWaveformData));
-            _phaseASeries.Values = data.Points.Select(point => new ObservablePoint(point.TimeMilliseconds, point.PhaseA)).ToArray();
-            _phaseBSeries.Values = data.Points.Select(point => new ObservablePoint(point.TimeMilliseconds, point.PhaseB)).ToArray();
-            _phaseCSeries.Values = data.Points.Select(point => new ObservablePoint(point.TimeMilliseconds, point.PhaseC)).ToArray();
-            FixWaveformYAxis(data);
-            WaveformSummary = $"{data.SampleRateHz:0.###} Hz · 每相 {data.Points.Count} 点 · A/B/C RMS：{data.PhaseARms:0.###} / {data.PhaseBRms:0.###} / {data.PhaseCRms:0.###} AD";
-            lock (progressStateLock)
-            {
-                progressCompleted = true;
-                WaveformProgressText = $"完整录波读取完成 {data.ReadAt:yyyy-MM-dd HH:mm:ss}";
+                throw;
             }
-            Notice = $"录波数据已更新：每相 {data.Points.Count} 点";
-            this.RaisePropertyChanged(nameof(HasWaveformData));
-            this.RaisePropertyChanged(nameof(HasNoWaveformData));
-            RaiseState();
+            finally
+            {
+                lock (progressStateLock) acceptingProgress = false;
+            }
         }, "读取录波数据失败");
     }
 
@@ -491,6 +611,45 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         RaiseState();
     }
 
+    private void HandleDeviceTypeChanged()
+    {
+        AutoRefresh = false;
+        IsDeviceConnected = false;
+        _consecutiveFailures = 0;
+        _deviceReadAt = default;
+        _protectionReadAt = default;
+        _faultReadAt = default;
+        _waveformData = null;
+        ++_waveformReadId;
+        DisplayWaveform(null);
+        WaveformProgressText = "尚未读取完整录波数据";
+        InitializeDeviceRows();
+        SelectedDataTabIndex = 0;
+        this.RaisePropertyChanged(nameof(SelectedDeviceType));
+        this.RaisePropertyChanged(nameof(IsFrameController));
+        this.RaisePropertyChanged(nameof(IsMoldedCaseCircuitBreaker));
+        this.RaisePropertyChanged(nameof(HasProtectionData));
+        this.RaisePropertyChanged(nameof(CurrentWaveformData));
+        this.RaisePropertyChanged(nameof(HasWaveformData));
+        this.RaisePropertyChanged(nameof(HasNoWaveformData));
+        Notice = $"已切换为{SelectedDevice.DisplayName}，串口保持当前状态，请重新进行连接测试";
+        RaiseState();
+    }
+
+    private void InitializeDeviceRows()
+    {
+        DeviceRows.Clear();
+        ProtectionRows.Clear();
+        FaultRows.Clear();
+
+        var profile = DeviceProfileCatalog.Get(SelectedDeviceType);
+        Merge(DeviceRows, CreatePlaceholders(profile.DeviceData.Definitions), null);
+        if (profile.ProtectionData is not null)
+            Merge(ProtectionRows, CreatePlaceholders(profile.ProtectionData.Definitions), null);
+        if (IsFrameController)
+            Merge(FaultRows, CreatePlaceholders(RegisterCatalog.FaultDefinitions), null);
+    }
+
     private void RestartAutoRefresh()
     {
         _autoRefreshCancellation?.Cancel(); _autoRefreshCancellation?.Dispose(); _autoRefreshCancellation = null;
@@ -506,7 +665,19 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }, token);
     }
 
-    private void RequestDeviceExport() { if (CanExportDevice) ExportRequested?.Invoke(this, new ExportRequest("设备数据", Flatten(DeviceRows), _deviceReadAt)); }
+    private void RequestDeviceExport()
+    {
+        if (CanExportDevice)
+            ExportRequested?.Invoke(this, new ExportRequest(
+                IsFrameController ? "设备数据" : "塑壳断路器设备数据",
+                Flatten(DeviceRows), _deviceReadAt));
+    }
+    private void RequestProtectionExport()
+    {
+        if (CanExportProtection)
+            ExportRequested?.Invoke(this, new ExportRequest(
+                $"{SelectedDevice.DisplayName}保护数据", Flatten(ProtectionRows), _protectionReadAt));
+    }
     private void RequestFaultExport()
     {
         if (CanExportFault)
@@ -527,20 +698,10 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     };
     private static IReadOnlyList<DecodedValue> Flatten(IEnumerable<DataRowViewModel> rows) => rows.SelectMany(r => new[] { r.Left, r.Right }.OfType<DataItemViewModel>()).Select(x => x.Value).ToArray();
     private static IReadOnlyList<DecodedValue> CreatePlaceholders(IEnumerable<RegisterDefinition> definitions) => definitions
-        .Where(definition => definition.ShowInTable)
-        .Select(definition => new DecodedValue(definition.Name, definition.Addresses, "—", definition.Unit, "尚未读取", [], ParseStatus.ReadFailed, "尚未读取", DateTimeOffset.MinValue))
+        .Select(definition => new DecodedValue(
+            definition.Name, definition.Addresses, "—", definition.Unit, "尚未读取", [],
+            ParseStatus.ReadFailed, "尚未读取", DateTimeOffset.MinValue))
         .ToArray();
-    private static IReadOnlyList<DecodedValue> ForTable(
-        IReadOnlyList<DecodedValue> values,
-        IEnumerable<RegisterDefinition> definitions)
-    {
-        var hidden = definitions
-            .Where(definition => !definition.ShowInTable)
-            .Select(definition => definition.Name)
-            .ToHashSet(StringComparer.Ordinal);
-        return hidden.Count == 0 ? values : values.Where(value => !hidden.Contains(value.Name)).ToArray();
-    }
-
     private Task SaveSettingsAsync()
     {
         if (DeviceAddress is not int deviceAddress || RefreshSeconds is not int refreshSeconds ||
@@ -550,7 +711,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
 
         return _settingsService.SaveAsync(new AppSettings(
             PortName, BaudRate, (byte)deviceAddress, refreshSeconds, Theme, WordOrder.HighWordFirst,
-            readTimeoutMilliseconds, faultDelayMilliseconds, SelectedControllerSeries));
+            readTimeoutMilliseconds, faultDelayMilliseconds, SelectedControllerSeries, SelectedDeviceType));
     }
     private void SetAddressRequired(bool value)
     {
@@ -561,7 +722,7 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
     }
     private void RaiseState()
     {
-        foreach (var name in new[] { nameof(SerialButtonText), nameof(SerialStatusText), nameof(DeviceStatusText), nameof(SerialStatusBrush), nameof(DeviceStatusBrush), nameof(CanConfigureSerial), nameof(CanToggleSerial), nameof(CanTest), nameof(CanRead), nameof(CanAutoRefresh), nameof(CanReadFault), nameof(CanExportDevice), nameof(CanExportFault), nameof(CanExportWaveform) }) this.RaisePropertyChanged(name);
+        foreach (var name in new[] { nameof(SerialButtonText), nameof(SerialStatusText), nameof(DeviceStatusText), nameof(SerialStatusBrush), nameof(DeviceStatusBrush), nameof(CanConfigureSerial), nameof(CanToggleSerial), nameof(CanTest), nameof(CanRead), nameof(CanAutoRefresh), nameof(CanSelectDeviceType), nameof(CanReadProtection), nameof(CanReadFault), nameof(CanReadWaveform), nameof(CanExportDevice), nameof(CanExportProtection), nameof(CanExportFault), nameof(CanExportWaveform) }) this.RaisePropertyChanged(name);
     }
 
     private static LineSeries<ObservablePoint> CreateWaveformSeries(string name) => new()
@@ -571,10 +732,31 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         Fill = null,
         GeometrySize = 0,
         LineSmoothness = 0,
+        XToolTipLabelFormatter = point => $"{point.Coordinate.SecondaryValue:0.####} ms",
+        YToolTipLabelFormatter = point => $"{point.Coordinate.PrimaryValue:0} AD",
     };
 
     /// <summary>
-    /// 使用本次完整录波的三相全部采样值固定 Y 轴。相别显隐只改变曲线集合，不再触发自动缩放。
+    /// 曲线仍使用 -80～40 的小数坐标，标签和工具提示才转换为具体时间。
+    /// 这样既保留 0.3125 ms 精度，也避免使用巨大时间戳造成浮点精度损失。
+    /// </summary>
+    private void ApplyWaveformTimeAxis(WaveformData data)
+    {
+        var axis = WaveformXAxes[0];
+        axis.Name = "录波时间";
+        axis.Labeler = value => ShouldShowWaveformTimeLabel(value)
+            ? data.GetAbsoluteTime(value).ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)
+            : string.Empty;
+
+        foreach (var series in new[] { _phaseASeries, _phaseBSeries, _phaseCSeries })
+            series.XToolTipLabelFormatter = point => data.GetAbsoluteTime(point.Coordinate.SecondaryValue)
+                .ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+
+        this.RaisePropertyChanged(nameof(WaveformXAxes));
+    }
+
+    /// <summary>
+    /// 使用已显示时间段的三相全部 AD 值固定 Y 轴。相别显隐只改变曲线集合，不再触发自动缩放。
     /// </summary>
     private void FixWaveformYAxis(WaveformData data)
     {
@@ -587,9 +769,11 @@ public sealed class MainViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var maximumAbsoluteValue = data.Points.Max(point => Math.Max(
-            Math.Abs((int)point.PhaseA),
-            Math.Max(Math.Abs((int)point.PhaseB), Math.Abs((int)point.PhaseC))));
-        var padding = Math.Max(1, (int)Math.Ceiling(maximumAbsoluteValue * 0.08));
+            Math.Abs((double)point.PhaseA),
+            Math.Max(
+                Math.Abs((double)point.PhaseB),
+                Math.Abs((double)point.PhaseC))));
+        var padding = Math.Max(1.0, maximumAbsoluteValue * 0.08);
         var limit = maximumAbsoluteValue + padding;
         axis.MinLimit = -limit;
         axis.MaxLimit = limit;

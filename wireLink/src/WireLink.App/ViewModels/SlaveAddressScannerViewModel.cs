@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using ReactiveUI;
 using WireLink.Core.Communication;
+using WireLink.Core.Registers;
 
 namespace WireLink.App.ViewModels;
 
@@ -13,9 +14,6 @@ public sealed record SlaveAddressScanResult(int Address)
 /// <summary>扫描总线上可通信的 Modbus 从机地址。</summary>
 public sealed class SlaveAddressScannerViewModel : ViewModelBase, IDisposable
 {
-    /// <summary>探测用寄存器，与主界面连接测试一致。</summary>
-    private const ushort ProbeRegister = 256;
-
     /// <summary>单地址探测超时；比常规读超时更短，以便快速跳过无响应地址。</summary>
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMilliseconds(300);
 
@@ -162,7 +160,10 @@ public sealed class SlaveAddressScannerViewModel : ViewModelBase, IDisposable
         try
         {
             var values = await _client.ReadHoldingRegistersAsync(
-                slaveAddress, ProbeRegister, 1, probeCts.Token);
+                slaveAddress,
+                DeviceProfileCatalog.Get(_mainViewModel.SelectedDeviceType).ProbeRegister,
+                1,
+                probeCts.Token);
             return values.Length == 1;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -208,7 +209,9 @@ public sealed class SlaveAddressScannerViewModel : ViewModelBase, IDisposable
 
     private void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.IsSerialOpen) or nameof(MainViewModel.PortName))
+        if (e.PropertyName is nameof(MainViewModel.IsSerialOpen)
+            or nameof(MainViewModel.PortName)
+            or nameof(MainViewModel.SelectedDeviceType))
             UpdateConnectionStatus();
     }
 

@@ -6,6 +6,8 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using WireLink.App.ViewModels;
 using WireLink.Core.Communication;
+using WireLink.Core.Models;
+using WireLink.Core.Registers;
 using WireLink.Core.Services;
 
 namespace WireLink.App.Views;
@@ -18,12 +20,18 @@ public partial class MainWindow : Window
     private RegisterReaderWindow? _registerReaderWindow;
     private SlaveAddressScannerWindow? _slaveAddressScannerWindow;
     private WaveformPointDetailsWindow? _waveformPointDetailsWindow;
+    private RmsCalculatorWindow? _rmsCalculatorWindow;
     private IModbusRtuClient? _client;
 
     public MainWindow()
     {
         InitializeComponent();
+        // 起始时间以纵轴为中心绘制，左侧预留空间，避免完整时间文字被控件边缘裁切。
+        WaveformChart.DrawMargin = new LiveChartsCore.Measure.Margin(
+            43, LiveChartsCore.Measure.Margin.Auto,
+            LiveChartsCore.Measure.Margin.Auto, LiveChartsCore.Measure.Margin.Auto);
         Opened += OnOpened;
+        KeyDown += OnKeyDown;
     }
 
     public MainWindow(MainViewModel viewModel, IModbusRtuClient client, IExcelExportService export, ILogStore logStore)
@@ -40,10 +48,67 @@ public partial class MainWindow : Window
             if (args.PropertyName == nameof(MainViewModel.CurrentWaveformData))
                 _waveformPointDetailsWindow?.SetData(viewModel.CurrentWaveformData);
         };
-        KeyDown += OnKeyDown;
     }
 
     private void OnPortDropDownOpened(object? sender, EventArgs e) => (DataContext as MainViewModel)?.RefreshPorts();
+
+    private void OnWaveformChartSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        // 使用控件宽度减去纵轴预留；不依赖尚未完成本轮布局的DrawMargin。
+        (DataContext as MainViewModel)?.UpdateWaveformPlotWidth(Math.Max(0, e.NewSize.Width - 110));
+        // 缩放后绘图区会重新布局，等鼠标再次命中时使用新的坐标定位。
+        (DataContext as MainViewModel)?.ClearWaveformHover();
+    }
+
+    private void OnWaveformPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel) return;
+        var pixel = e.GetPosition(WaveformChart);
+        var core = WaveformChart.CoreChart;
+        var origin = core.DrawMarginLocation;
+        var size = core.DrawMarginSize;
+        if (size.Width <= 0 || size.Height <= 0 || pixel.X < origin.X || pixel.Y < origin.Y ||
+            pixel.X >= origin.X + size.Width || pixel.Y >= origin.Y + size.Height)
+        {
+            viewModel.ClearWaveformHover();
+            return;
+        }
+        var coordinate = WaveformChart.ScalePixelsToData(new LiveChartsCore.Drawing.LvcPointD(pixel.X, pixel.Y));
+        viewModel.UpdateWaveformHover(coordinate.X);
+        PositionWaveformHoverCard();
+    }
+
+    private void OnWaveformHoverCardSizeChanged(object? sender, SizeChangedEventArgs e) =>
+        PositionWaveformHoverCard();
+
+    private void PositionWaveformHoverCard()
+    {
+        if (DataContext is not MainViewModel { HasWaveformHover: true, HoveredWaveformSegment: { } segment })
+            return;
+
+        var core = WaveformChart.CoreChart;
+        var origin = core.DrawMarginLocation;
+        var size = core.DrawMarginSize;
+        if (size.Width <= 0 || size.Height <= 0) return;
+
+        const double padding = 8;
+        WaveformHoverCard.MaxWidth = Math.Max(1, Math.Min(360, size.Width - padding * 2));
+        var cardSize = WaveformHoverCard.Bounds.Size;
+        if (cardSize.Width <= 0 || cardSize.Height <= 0) return;
+
+        var block = WaveformCatalog.GetBlock(segment, WaveformPhase.A);
+        var midpoint = block.SegmentStartMilliseconds + 10;
+        var anchor = WaveformChart.ScaleDataToPixels(new LiveChartsCore.Drawing.LvcPointD(midpoint, 0));
+        var left = Math.Clamp(anchor.X - cardSize.Width / 2,
+            origin.X + padding, Math.Max(origin.X + padding, origin.X + size.Width - cardSize.Width - padding));
+        var top = Math.Clamp(origin.Y + padding,
+            padding, Math.Max(padding, WaveformHoverLayer.Bounds.Height - cardSize.Height - padding));
+        Canvas.SetLeft(WaveformHoverCard, left);
+        Canvas.SetTop(WaveformHoverCard, top);
+    }
+
+    private void OnWaveformPointerExited(object? sender, PointerEventArgs e) =>
+        (DataContext as MainViewModel)?.ClearWaveformHover();
     private async void OnErrorDialogRequested(object? sender, ErrorDialogRequest request)
     {
         var dialog = new ErrorDialogWindow(request);
@@ -56,7 +121,19 @@ public partial class MainWindow : Window
     }
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F8 && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && DataTabs.SelectedItem == WaveformTab)
+        if (e.Key == Key.F1)
+        {
+            ShowAboutWindow();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F9 && e.KeyModifiers == KeyModifiers.None)
+        {
+            ShowRmsCalculatorWindow();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F8 && e.KeyModifiers.HasFlag(KeyModifiers.Shift)
+            && DataContext is MainViewModel { IsFrameController: true }
+            && DataTabs.SelectedItem == WaveformTab)
         {
             ShowWaveformPointDetailsWindow();
             e.Handled = true;
@@ -100,6 +177,12 @@ public partial class MainWindow : Window
             screen.WorkingArea.Y + Math.Max(0, (screen.WorkingArea.Height - physicalHeight) / 2));
     }
 
+    private async void ShowAboutWindow()
+    {
+        var dialog = new AboutWindow();
+        await dialog.ShowDialog(this);
+    }
+
     private void ShowLogWindow()
     {
         if (_logStore is null) return;
@@ -114,6 +197,19 @@ public partial class MainWindow : Window
         _registerReaderWindow = new RegisterReaderWindow(new RegisterReaderViewModel(_client, mainViewModel));
         _registerReaderWindow.Closed += (_, _) => _registerReaderWindow = null;
         _registerReaderWindow.Show();
+    }
+
+    private void ShowRmsCalculatorWindow()
+    {
+        if (_rmsCalculatorWindow is { } existing)
+        {
+            if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
+            existing.Activate();
+            return;
+        }
+        _rmsCalculatorWindow = new RmsCalculatorWindow();
+        _rmsCalculatorWindow.Closed += (_, _) => _rmsCalculatorWindow = null;
+        _rmsCalculatorWindow.Show(this);
     }
 
     private void ShowWaveformPointDetailsWindow()
